@@ -6,7 +6,7 @@ from numpy.random import default_rng
 
 
 class Simulation():
-    def __init__(self,rng_seed=None):
+    def __init__(self,max_time=2000,rng_seed=None):
 
         # Random number generator
         self.rng_generator = default_rng(rng_seed)
@@ -16,13 +16,14 @@ class Simulation():
         self.C = 3
         self.group_2_counter = 0
         self.group_4_counter = 0
-        self.rng_generator_full = False
+        self.event_list_empty = False
+        self.max_time = max_time
 
         self.run()
 
 
     def event_I(self,curr_event):
-        time  = curr_event["Time"]
+        time = curr_event["Time"]
 
         # Action
         self.N = 0
@@ -51,10 +52,11 @@ class Simulation():
         t_a = self.rng_generator.uniform(5,55)
 
         # Queue up more
-        temp = {}
-        temp["Time"] = time + t_a
-        temp["Event"] = "A"
-        self.time_events_list.addNode(temp["Time"], temp)
+        if time + t_a <= self.max_time:
+            temp = {}
+            temp["Time"] = time + t_a
+            temp["Event"] = "A"
+            self.time_events_list.addNode(temp["Time"], temp)
 
         if self.N <= self.C:
             temp = {}
@@ -123,7 +125,7 @@ class Simulation():
         # Move head to next time
         self.time_events_list.head = self.time_events_list.head.next
         if self.time_events_list.head is None:
-            print(self.time_events_list.head)
+            self.event_list_empty = True
 
     def run(self):
         temp = {}
@@ -131,10 +133,10 @@ class Simulation():
         temp["Event"] = "I"
         self.time_events_list.addNode(temp["Time"],temp)
 
-        while not self.rng_generator_full:
+        while not self.event_list_empty:
             self.update()
 
 
 if __name__ == "__main__":
-    s = Simulation()
+    s = Simulation(2000)
     print(s.df_time_table)
