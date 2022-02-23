@@ -15,12 +15,9 @@ class Simulation():
         self.time_events_list = LinkedList()
         self.C = 3
         self.group_2_counter = 0
-        self.group_4_counter = 0
-        self.arrival_counter = 0
-        
+        self.group_4_counter = 0        
         
         self.arrival_times = []
-        self.group_assignment = []
         self.group_2_waittime = []
         self.group_4_waittime = []
         
@@ -87,12 +84,12 @@ class Simulation():
         if group_size < .6:
             self.group_2_counter += 1
             t_s = 60
-            self.group_2_waittime += time - self.arrival_times[0] + t_s
+            self.group_2_waittime.append(time - self.arrival_times[0] + t_s)
             del self.arrival_times[0]
         else:
             self.group_4_counter += 1
             t_s = 120
-            self.group_4_waittime += time - self.arrival_times[0] + t_s
+            self.group_4_waittime.append(time - self.arrival_times[0] + t_s)
             del self.arrival_times[0]
 
         # Queue up more
