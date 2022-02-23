@@ -148,5 +148,31 @@ class Simulation():
 
 
 if __name__ == "__main__":
-    s = Simulation(2000)
+    month = 43200 # minutes
+    s = Simulation(month)
     print(s.df_time_table)
+    final_time = s.df_time_table.iloc[len(s.df_time_table)-1]["Time"]
+    num_group_2 = s.group_2_counter
+    num_group_4 = s.group_4_counter
+    
+    days = final_time / 60 / 24
+    
+    # Part A
+    print("Avg number of group size 2 per day:", num_group_2 / days)
+    print("Avg number of group size 4 per day:", num_group_4 / days)
+    print("Avg number of groups (combined) per day:", (num_group_2 + num_group_4) / days)
+    
+    # Part B
+    group_2_waittime = s.group_2_waittime
+    group_4_waittime = s.group_4_waittime
+    mean_group_2 = np.mean(group_2_waittime)
+    mean_group_4 = np.mean(group_4_waittime)
+    mean_combined = np.mean(group_2_waittime.extend(group_4_waittime))
+    
+    print("Group 2 mean time in system:", mean_group_2, "minutes.")
+    print("Group 4 mean time in system:", mean_group_4, "minutes.")
+    print("Combined groups mean time in system:", mean_combined, "minutes.")
+
+
+
+    
