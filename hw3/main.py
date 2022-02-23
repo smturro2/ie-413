@@ -14,8 +14,8 @@ class Simulation():
         self.df_time_table = pd.DataFrame(columns=["Time", "Event","N","T_s","T_a"])
         self.time_events_list = LinkedList()
         self.C = 3
-        self.arrival_times_counter = 0
-        self.group_sizes_counter = 0
+        self.group_2_counter = 0
+        self.group_4_counter = 0
         self.rng_generator_full = False
 
         self.run()
@@ -74,8 +74,10 @@ class Simulation():
         # RNG
         group_size = self.rng_generator.uniform()
         if group_size < .6:
+            self.group_2_counter += 1
             t_s = 60
         else:
+            self.group_4_counter += 1
             t_s = 120
 
         # Queue up more
