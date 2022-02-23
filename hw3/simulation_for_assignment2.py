@@ -2,14 +2,27 @@ import numpy as np
 import numpy.random as rand
 import pandas as pd
 from sorted_linked_list import LinkedList
-from numpy.random import default_rng
 
-
+# This class uses a list of uniform variables as its psuedo random number generator
+# This version is asked for in assignment 2
 class Simulation():
-    def __init__(self,rng_seed=None):
+    def __init__(self):
 
-        # Random number generator
-        self.rng_generator = default_rng(rng_seed)
+        # RNG for the arrival times
+        self.arrival_times = [.81, .20, .49, .96, .90, .16, .27, .56, .84, .82, .99, .93, .02, .01, .13, .18, .20, .77, .43, .49, .90, .91, .62, .57]
+        self.arrival_times = np.array(self.arrival_times)
+        self.arrival_times = 50*self.arrival_times+5
+
+        # RNG for the group sizes
+        self.group_sizes = [.39, .27, .78, .90, .91, .49, .39, .88, .65, .37, .88, .87, .03, .09, .19, .83, .73, .43, .84,
+                       .81, .07, .45, .67, .29]
+        self.group_sizes = np.array(self.group_sizes)
+        # self.playing_times = np.zeros_like(self.group_sizes)
+        # for i in range(len(self.group_sizes)):
+        #     if self.group_sizes[i] < .6:
+        #         self.playing_times[i] = 60
+        #     else:
+        #         self.playing_times[i] = 120
 
         self.df_time_table = pd.DataFrame(columns=["Time", "Event","N","T_s","T_a"])
         self.time_events_list = LinkedList()
@@ -28,7 +41,8 @@ class Simulation():
         self.N = 0
 
         # RNG
-        t_a = self.rng_generator.uniform(5,55)
+        t_a = self.arrival_times[self.arrival_times_counter]
+        self.arrival_times_counter = self.arrival_times_counter + 1
 
         # Queue up more
         temp = {}
@@ -48,7 +62,11 @@ class Simulation():
         self.N = self.N + 1
 
         # RNG
-        t_a = self.rng_generator.uniform(5,55)
+        if self.arrival_times_counter == 24:
+            self.rng_generator_full = True
+            return
+        t_a = self.arrival_times[self.arrival_times_counter]
+        self.arrival_times_counter = self.arrival_times_counter + 1
 
         # Queue up more
         temp = {}
@@ -72,7 +90,12 @@ class Simulation():
         time  = curr_event["Time"]
 
         # RNG
-        group_size = self.rng_generator.uniform()
+        if self.group_sizes_counter == 24:
+            self.rng_generator_full = True
+            raise RuntimeError("This should not occur with the current RNG values")
+            return
+        group_size = self.group_sizes[self.group_sizes_counter]
+        self.group_sizes_counter = self.group_sizes_counter + 1
         if group_size < .6:
             t_s = 60
         else:
