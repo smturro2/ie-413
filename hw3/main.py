@@ -16,6 +16,14 @@ class Simulation():
         self.C = 3
         self.group_2_counter = 0
         self.group_4_counter = 0
+        self.arrival_counter = 0
+        
+        
+        self.arrival_times = []
+        self.group_assignment = []
+        self.group_2_waittime = []
+        self.group_4_waittime = []
+        
         self.event_list_empty = False
         self.max_time = max_time
 
@@ -47,7 +55,8 @@ class Simulation():
 
         # Action
         self.N = self.N + 1
-
+        self.arrival_times.append(time)
+        
         # RNG
         t_a = self.rng_generator.uniform(5,55)
 
@@ -78,9 +87,13 @@ class Simulation():
         if group_size < .6:
             self.group_2_counter += 1
             t_s = 60
+            self.group_2_waittime += time - self.arrival_times[0] + t_s
+            del self.arrival_times[0]
         else:
             self.group_4_counter += 1
             t_s = 120
+            self.group_4_waittime += time - self.arrival_times[0] + t_s
+            del self.arrival_times[0]
 
         # Queue up more
         temp = {}
