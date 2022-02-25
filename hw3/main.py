@@ -167,7 +167,7 @@ if __name__ == "__main__":
     group_4_waittime = s.group_4_waittime
     mean_group_2 = np.mean(group_2_waittime)
     mean_group_4 = np.mean(group_4_waittime)
-    mean_combined = np.mean(group_2_waittime.extend(group_4_waittime))
+    mean_combined = np.mean(group_2_waittime + group_4_waittime)
     
     print("Group 2 mean time in system:", mean_group_2, "minutes.")
     print("Group 4 mean time in system:", mean_group_4, "minutes.")
