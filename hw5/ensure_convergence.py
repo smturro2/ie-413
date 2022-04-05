@@ -16,7 +16,7 @@ if __name__ == "__main__":
 
         avg_cars_parked.append(s.get_avg_num_current_parked())
         frac_balked.append(s.get_fraction_cars_balked())
-        print(f"Simulation {sim_count+1}/{len(simulation_times*2)} Done.")
+        print(f"Simulation {sim_count+1}/{len(simulation_times)*2} Done.")
         sim_count += 1
 
     plt.subplot(1,2,1)
@@ -38,7 +38,7 @@ if __name__ == "__main__":
 
         avg_cars_parked.append(s.get_avg_num_current_parked())
         frac_balked.append(s.get_fraction_cars_balked())
-        print(f"Simulation {sim_count+1}/{len(simulation_times)} Done.")
+        print(f"Simulation {sim_count+1}/{len(simulation_times)*2} Done.")
         sim_count += 1
 
     plt.subplot(1,2,1)
