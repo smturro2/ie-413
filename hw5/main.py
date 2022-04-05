@@ -78,7 +78,7 @@ class Simulation():
             t_a = self.rng_generator.exponential(1 / self.arrival_rate)
         else:
             time_of_day = time % 24
-            if time_of_day > 4 and time_of_day < 6:
+            if time_of_day > 16 and time_of_day < 18:
                 t_a = self.rng_generator.exponential(1 / self.increased_arrival_rate)
             else:
                 t_a = self.rng_generator.exponential(1 / self.arrival_rate)
