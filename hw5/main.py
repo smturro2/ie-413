@@ -27,10 +27,6 @@ class Simulation():
         self.num_total_arrivals = None
         self.num_total_balks = None
         self.get_distr_parked = None
-
-        # self.arrival_times = []
-        # self.group_2_waittime = []
-        # self.group_4_waittime = []
         
         self.event_list_empty = False
         self.max_time = max_time
@@ -131,7 +127,13 @@ class Simulation():
 
         while not self.event_list_empty:
             self.update()
-
+            
+    def has_phantom(self):
+        # Naive check to ensure no overlapping times, though is incredibly unlikely for non-rounded random variates
+        if len(self.df_time_table.duplicated(subset=['time']).unique()) == 2:
+            return True
+        return False
+    
     def get_fraction_cars_balked(self):
         return self.num_total_balks / self.num_total_arrivals
 
@@ -157,12 +159,7 @@ if __name__ == "__main__":
     # - Numpy takes the average as the input for the exponential function. The average of
     #   the exponential is 1/(the poisson rate)
 
-    # todo XP
-    # - Double check for phantom cars/spaces
-    # - Double check wording that "looking over sets of 24 periods" means a continuous simulation
-    #   and not running multiple sims for only 24 hours
-
-    total_run_time = 500 # in hours
+    total_run_time = 1440 # in hours
     seed = 53243
 
     s = Simulation(total_run_time,rng_seed=seed)
@@ -171,8 +168,8 @@ if __name__ == "__main__":
     print(f"a) {s.get_fraction_cars_balked():.3f}")
     print(f"b) {s.get_distr_num_current_parked()}")
     print(f"c) {s.get_avg_num_current_parked():.3f}")
-    print(s.get_distr_num_current_parked())
-    print(s.get_avg_num_current_parked())
+    
+    # print(f"Has Phantom) {s.has_phantom()}")     # Was False
 
     s = Simulation(total_run_time,rng_seed=seed,increased_arrival_rate=12)
     print("\n With Increased Arrival Rate")
@@ -180,3 +177,5 @@ if __name__ == "__main__":
     print(f"a) {s.get_fraction_cars_balked():.3f}")
     print(f"b) {s.get_distr_num_current_parked()}")
     print(f"c) {s.get_avg_num_current_parked():.3f}")
+    
+    # print(f"Has Phantom) {s.has_phantom()}")    # Was False
