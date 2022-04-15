@@ -5,14 +5,10 @@ from sorted_linked_list import LinkedList
 from numpy.random import default_rng
 
 # Done:
-# __init___, I, P, B_CI, E_CI, P
-# Changed the log to reflect new columns for existing events
-# Arrival to reflect increased/decreased rate
-# Master dataframe, daily dataframe appended
-# Scheduled END_DAY such that it will be the last event, which will start a new day
+# all events are done, code runs 
 
 # To do: 
-# Add events for camera/clerk/roadtest/writtentest/cashier
+# Run it for a single day, check that the master_df_time_table is what we expect (non-neg, etc)
 # Change nonempty conditions to be random (uniform 30-70? Is it even needed?)
 # LinkedList: Add priority P > B for initial processing, both have time 0 
 # Implement dynamic allocation_policy
@@ -21,10 +17,9 @@ from numpy.random import default_rng
 # Functions to calculate output metrics
 # Change numbers for rates, capacity, etc. 
 
-
 # Overall Notes
 # - Moved creation of df_time_table to event_I so that it can be reset each day. Master table is in __init__
-# - Time is in hours
+# - Time is in hours, max_days is days
 # - Slide 117 of Chapter 1 has the event graph for multi-server; it was helpful to make sure stuff is being tracked correctly
 # - XP added some general comments to Project Proposal document about flow of customers
 
@@ -59,13 +54,13 @@ class Simulation():
             self.idle_roadtest_servers = 2
             self.idle_writtentest_servers = 4
             self.idle_clerk_servers = 15
-            self.cashier_servers = 1
+            self.idle_cashier_servers = 1
         elif self.allocation_policy == 'dynamic':
             self.idle_checkin_servers = 3
             self.idle_camera_servers = 2
             self.idle_roadtest_servers = 1
-            self.idle_writtentest_servers = 15
-            self.idle_clerk_servers = 1
+            self.idle_writtentest_servers = 4
+            self.idle_clerk_servers = 15
             self.idle_cashier_servers = 1
         
         # Capacity for check-in line inside. Infinite buffer outside
@@ -81,6 +76,11 @@ class Simulation():
         self.p_camera_clerk = 0.90
         self.p_camera_roadtest = 0.05
         self.p_camera_writtentest = 0.05
+        
+        # Increased arrival rate times, 7:30-5:00 workday assuming. In hours
+        self.morning_rush_end = 0.5 # until 8:00
+        self.lunch_rush_start = 3.5 # 11:00 start
+        self.lunch_rush_end = 6.5 # 2:00 end
         
         # Others
         
@@ -163,7 +163,7 @@ class Simulation():
         self.time_events_list.addNode(temp["time"], temp)
         
         # Queue END_DAY
-        M = 100
+        M = 1000
         temp = {}
         temp["time"] = time + M # far enough into the future such that it will be the last event
         temp["event"] = "END_DAY"
@@ -172,7 +172,7 @@ class Simulation():
         # Log        
         curr_event["num_total_arrivals"] = self.num_total_arrivals
         curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
-        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outide
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
         curr_event["num_line_camera"] = self.num_line_camera
         curr_event["num_line_clerk"] = self.num_line_clerk
         curr_event["num_line_roadtest"] = self.num_line_roadtest
@@ -229,7 +229,7 @@ class Simulation():
         # Log
         curr_event["num_total_arrivals"] = self.num_total_arrivals
         curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
-        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outide
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
         curr_event["num_line_camera"] = self.num_line_camera
         curr_event["num_line_clerk"] = self.num_line_clerk
         curr_event["num_line_roadtest"] = self.num_line_roadtest
@@ -247,9 +247,14 @@ class Simulation():
 
         # Action
         self.num_total_arrivals += 1
+        
+        if self.num_line_checkin_inside < self.inside_capacity:
+            self.num_line_checkin_inside += 1
+        else:
+            self.num_line_checkin_outside += 1
 
-        # Determine t_a. 7:30-5:00 workday, elevated before 8:00, during 11:00-2:00
-        if time <= 0.5 or (3.5 < time and time <= 6.5):
+        # Determine t_a based on rush times 
+        if time <= self.morning_rush_end or (self.lunch_rush_start < time and time <= self.lunch_rush_end):
             t_a = self.rng_generator.exponential(1 / self.increased_arrival_rate)
         else:
             t_a = self.rng_generator.exponential(1 / self.decreased_arrival_rate)
@@ -260,11 +265,18 @@ class Simulation():
             temp["time"] = time + t_a
             temp["event"] = "A"
             self.time_events_list.addNode(temp["time"], temp)
+            
+        # Queue a begin check in if there is an active server
+        if self.idle_checkin_servers > 0:
+            temp = {}
+            temp["time"] = time
+            temp["event"] = "B_CI"
+            self.time_events_list.addNode(temp["time"], temp)
 
         # Log
         curr_event["num_total_arrivals"] = self.num_total_arrivals
         curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
-        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outide
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
         curr_event["num_line_camera"] = self.num_line_camera
         curr_event["num_line_clerk"] = self.num_line_clerk
         curr_event["num_line_roadtest"] = self.num_line_roadtest
@@ -278,23 +290,28 @@ class Simulation():
     def event_B_CI(self,curr_event):
         '''Begin Check-in'''
         
-        time  = curr_event["time"]
+        time = curr_event["time"]
         
         # Action
         self.idle_checkin_servers -= 1
         self.num_line_checkin_inside -= 1
+        
+        # Let someone inside if someone is waiting outside
+        if self.num_line_checkin_outside > 0:
+            self.num_line_checkin_outside -= 1
+            self.num_line_checkin_inside += 1
 
         # Queue an End Check-in
         temp = {}
-        t_s = self.rng_generator.exponential(1 / self.checkin_rate)
-        temp["time"] = time + t_s
+        t_ci = self.rng_generator.exponential(1 / self.checkin_rate)
+        temp["time"] = time + t_ci
         temp["event"] = "E_CI"
         self.time_events_list.addNode(temp["time"], temp)
 
         # Log
         curr_event["num_total_arrivals"] = self.num_total_arrivals
         curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
-        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outide
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
         curr_event["num_line_camera"] = self.num_line_camera
         curr_event["num_line_clerk"] = self.num_line_clerk
         curr_event["num_line_roadtest"] = self.num_line_roadtest
@@ -321,21 +338,26 @@ class Simulation():
             self.time_events_list.addNode(temp["time"], temp)
             
         # Transfer customer to camera or clerk based on random variate
-        if self.rng_generator.random() < self.p_checkin_camera:
-            temp = {}
-            temp["time"] = time
-            temp["event"] = "B_CAM"
-            self.time_events_list.addNode(temp["time"], temp)
+        rng = self.rng_generator.random()
+        if rng < self.p_checkin_camera:
+            self.num_line_camera += 1
+            if self.idle_camera_servers:
+                temp = {}
+                temp["time"] = time
+                temp["event"] = "B_CAM"
+                self.time_events_list.addNode(temp["time"], temp)
         else:
-            temp = {}
-            temp["time"] = time
-            temp["event"] = "B_CLK"
-            self.time_events_list.addNode(temp["time"], temp)
+            self.num_line_clerk += 1
+            if self.idle_clerk_servers > 0:
+                temp = {}
+                temp["time"] = time
+                temp["event"] = "B_CLK"
+                self.time_events_list.addNode(temp["time"], temp)
 
         # Log
         curr_event["num_total_arrivals"] = self.num_total_arrivals
         curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
-        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outide
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
         curr_event["num_line_camera"] = self.num_line_camera
         curr_event["num_line_clerk"] = self.num_line_clerk
         curr_event["num_line_roadtest"] = self.num_line_roadtest
@@ -345,45 +367,349 @@ class Simulation():
         self.df_time_table = self.df_time_table.append(curr_event, ignore_index=True)
         
         
+        
     def event_B_CAM(self,curr_event):
         '''Begin camera event'''
-        pass
+        
+        time = curr_event["time"]
+        
+        # Action
+        self.idle_camera_servers -= 1
+        self.num_line_camera -= 1
+
+        # Queue an End Camera
+        temp = {}
+        t_cam = self.rng_generator.exponential(1 / self.camera_rate)
+        temp["time"] = time + t_cam
+        temp["event"] = "E_CAM"
+        self.time_events_list.addNode(temp["time"], temp)
+
+        # Log
+        curr_event["num_total_arrivals"] = self.num_total_arrivals
+        curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
+        curr_event["num_line_camera"] = self.num_line_camera
+        curr_event["num_line_clerk"] = self.num_line_clerk
+        curr_event["num_line_roadtest"] = self.num_line_roadtest
+        curr_event["num_line_writtentest"] = self.num_line_writtentest
+        curr_event["num_line_cashier"] = self.num_line_cashier
+        curr_event["day_counter"] = self.day_counter
+        self.df_time_table = self.df_time_table.append(curr_event, ignore_index=True)
+    
+    
     
     def event_E_CAM(self,curr_event):
         '''End camera event'''
-        pass
+        time = curr_event["time"]
+
+        # Action
+        self.idle_camera_servers += 1
+
+        # Queue up more immediately if there is a line
+        if self.num_line_camera >= self.idle_camera_servers:
+            temp = {}
+            temp["time"] = time
+            temp["event"] = "B_CAM"
+            self.time_events_list.addNode(temp["time"], temp)
+            
+        # Transfer to clerk, road test, or written test
+        rng = self.rng_generator.random()
+        if rng <= self.p_camera_clerk:
+            self.num_line_clerk += 1
+            if self.idle_cashier_servers > 0:
+                temp = {}
+                temp["time"] = time
+                temp["event"] = "B_CLK"
+                self.time_events_list.addNode(temp["time"], temp)
+        elif self.p_camera_clerk < rng <= self.p_camera_clerk + self.p_camera_roadtest:
+            self.num_line_roadtest += 1
+            if self.idle_roadtest_servers > 0:
+                temp = {}
+                temp["time"] = time
+                temp["event"] = "B_RT"
+                self.time_events_list.addNode(temp["time"], temp)
+        else:
+            self.num_line_writtentest += 1
+            if self.idle_writtentest_servers > 0:
+                temp = {}
+                temp["time"] = time
+                temp["event"] = "B_WT"
+                self.time_events_list.addNode(temp["time"], temp)
+
+        # Log
+        curr_event["num_total_arrivals"] = self.num_total_arrivals
+        curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
+        curr_event["num_line_camera"] = self.num_line_camera
+        curr_event["num_line_clerk"] = self.num_line_clerk
+        curr_event["num_line_roadtest"] = self.num_line_roadtest
+        curr_event["num_line_writtentest"] = self.num_line_writtentest
+        curr_event["num_line_cashier"] = self.num_line_cashier
+        curr_event["day_counter"] = self.day_counter
+        self.df_time_table = self.df_time_table.append(curr_event, ignore_index=True)
+    
+    
     
     def event_B_CLK(self,curr_event):
         '''Begin clerk event'''
-        pass
+        
+        time = curr_event["time"]
+        
+        # Action
+        self.idle_clerk_servers -= 1
+        self.num_line_clerk -= 1
+
+        # Queue an End Check-in
+        temp = {}
+        t_clk = self.rng_generator.exponential(1 / self.clerk_rate)
+        temp["time"] = time + t_clk
+        temp["event"] = "E_CLK"
+        self.time_events_list.addNode(temp["time"], temp)
+
+        # Log
+        curr_event["num_total_arrivals"] = self.num_total_arrivals
+        curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
+        curr_event["num_line_camera"] = self.num_line_camera
+        curr_event["num_line_clerk"] = self.num_line_clerk
+        curr_event["num_line_roadtest"] = self.num_line_roadtest
+        curr_event["num_line_writtentest"] = self.num_line_writtentest
+        curr_event["num_line_cashier"] = self.num_line_cashier
+        curr_event["day_counter"] = self.day_counter
+        self.df_time_table = self.df_time_table.append(curr_event, ignore_index=True)
+    
+    
     
     def event_E_CLK(self,curr_event):
         '''End clerk event'''
-        pass
+        time = curr_event["time"]
+
+        # Action
+        self.idle_clerk_servers += 1
+
+        # Queue up more immediately if there is a line
+        if self.num_line_clerk >= self.idle_clerk_servers:
+            temp = {}
+            temp["time"] = time
+            temp["event"] = "B_CLK"
+            self.time_events_list.addNode(temp["time"], temp)
+            
+        # Always transfer customer to cashier
+        self.num_line_cashier += 1
+        if self.idle_cashier_servers > 0:
+            temp = {}
+            temp["time"] = time
+            temp["event"] = "B_CSH"
+            self.time_events_list.addNode(temp["time"], temp)
+
+        # Log
+        curr_event["num_total_arrivals"] = self.num_total_arrivals
+        curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
+        curr_event["num_line_camera"] = self.num_line_camera
+        curr_event["num_line_clerk"] = self.num_line_clerk
+        curr_event["num_line_roadtest"] = self.num_line_roadtest
+        curr_event["num_line_writtentest"] = self.num_line_writtentest
+        curr_event["num_line_cashier"] = self.num_line_cashier
+        curr_event["day_counter"] = self.day_counter
+        self.df_time_table = self.df_time_table.append(curr_event, ignore_index=True)
+        
+        
         
     def event_B_RT(self,curr_event):
         '''Begin road test event'''
-        pass
+        
+        time  = curr_event["time"]
+        
+        # Action
+        self.idle_roadtest_servers -= 1
+        self.num_line_roadtest -= 1
+
+        # Queue an End Road Test
+        temp = {}
+        t_rt = self.rng_generator.exponential(1 / self.roadtest_rate)
+        temp["time"] = time + t_rt
+        temp["event"] = "E_RT"
+        self.time_events_list.addNode(temp["time"], temp)
+
+        # Log
+        curr_event["num_total_arrivals"] = self.num_total_arrivals
+        curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
+        curr_event["num_line_camera"] = self.num_line_camera
+        curr_event["num_line_clerk"] = self.num_line_clerk
+        curr_event["num_line_roadtest"] = self.num_line_roadtest
+        curr_event["num_line_writtentest"] = self.num_line_writtentest
+        curr_event["num_line_cashier"] = self.num_line_cashier
+        curr_event["day_counter"] = self.day_counter
+        self.df_time_table = self.df_time_table.append(curr_event, ignore_index=True)
+    
+    
     
     def event_E_RT(self,curr_event):
         '''End road test event'''
-        pass
+        
+        time = curr_event["time"]
+
+        # Action
+        self.idle_roadtest_servers += 1
+
+        # Queue up more immediately if there is a line
+        if self.num_line_roadtest >= self.idle_roadtest_servers:
+            temp = {}
+            temp["time"] = time
+            temp["event"] = "B_RT"
+            self.time_events_list.addNode(temp["time"], temp)
+            
+        # Always transfer customer to cashier, camera happened before
+        self.num_line_cashier += 1
+        if self.idle_cashier_servers > 0:
+            temp = {}
+            temp["time"] = time
+            temp["event"] = "B_CSH"
+            self.time_events_list.addNode(temp["time"], temp)
+
+        # Log
+        curr_event["num_total_arrivals"] = self.num_total_arrivals
+        curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
+        curr_event["num_line_camera"] = self.num_line_camera
+        curr_event["num_line_clerk"] = self.num_line_clerk
+        curr_event["num_line_roadtest"] = self.num_line_roadtest
+        curr_event["num_line_writtentest"] = self.num_line_writtentest
+        curr_event["num_line_cashier"] = self.num_line_cashier
+        curr_event["day_counter"] = self.day_counter
+        self.df_time_table = self.df_time_table.append(curr_event, ignore_index=True)
+    
+    
     
     def event_B_WT(self,curr_event):
         '''Begin written test event'''
-        pass
+        
+        time = curr_event["time"]
+        
+        # Action
+        self.idle_writtentest_servers -= 1
+        self.num_line_writtentest -= 1
+
+        # Queue an End Written Test
+        temp = {}
+        t_wt = self.rng_generator.exponential(1 / self.writtentest_rate)
+        temp["time"] = time + t_wt
+        temp["event"] = "E_WT"
+        self.time_events_list.addNode(temp["time"], temp)
+
+        # Log
+        curr_event["num_total_arrivals"] = self.num_total_arrivals
+        curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
+        curr_event["num_line_camera"] = self.num_line_camera
+        curr_event["num_line_clerk"] = self.num_line_clerk
+        curr_event["num_line_roadtest"] = self.num_line_roadtest
+        curr_event["num_line_writtentest"] = self.num_line_writtentest
+        curr_event["num_line_cashier"] = self.num_line_cashier
+        curr_event["day_counter"] = self.day_counter
+        self.df_time_table = self.df_time_table.append(curr_event, ignore_index=True)
+    
+    
     
     def event_E_WT(self,curr_event):
         '''End written test event'''
-        pass
+        
+        time = curr_event["time"]
+
+        # Action
+        self.idle_writtentest_servers += 1
+
+        # Queue up more immediately if there is a line
+        if self.num_line_writtentest >= self.idle_writtentest_servers:
+            temp = {}
+            temp["time"] = time
+            temp["event"] = "B_WT"
+            self.time_events_list.addNode(temp["time"], temp)
+            
+        # Always transfer customer to cashier, camera happened before
+        self.num_line_cashier += 1
+        if self.idle_cashier_servers > 0:
+            temp = {}
+            temp["time"] = time
+            temp["event"] = "B_CSH"
+            self.time_events_list.addNode(temp["time"], temp)
+
+        # Log
+        curr_event["num_total_arrivals"] = self.num_total_arrivals
+        curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
+        curr_event["num_line_camera"] = self.num_line_camera
+        curr_event["num_line_clerk"] = self.num_line_clerk
+        curr_event["num_line_roadtest"] = self.num_line_roadtest
+        curr_event["num_line_writtentest"] = self.num_line_writtentest
+        curr_event["num_line_cashier"] = self.num_line_cashier
+        curr_event["day_counter"] = self.day_counter
+        self.df_time_table = self.df_time_table.append(curr_event, ignore_index=True)
+    
+    
     
     def event_B_CSH(self,curr_event):
         '''Begin cashier event'''
-        pass
+        
+        time = curr_event["time"]
+        
+        # Action
+        self.idle_cashier_servers -= 1
+        self.num_line_cashier -= 1
+
+        # Queue an End Check-in
+        temp = {}
+        t_csh = self.rng_generator.exponential(1 / self.cashier_rate)
+        temp["time"] = time + t_csh
+        temp["event"] = "E_CSH"
+        self.time_events_list.addNode(temp["time"], temp)
+
+        # Log
+        curr_event["num_total_arrivals"] = self.num_total_arrivals
+        curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
+        curr_event["num_line_camera"] = self.num_line_camera
+        curr_event["num_line_clerk"] = self.num_line_clerk
+        curr_event["num_line_roadtest"] = self.num_line_roadtest
+        curr_event["num_line_writtentest"] = self.num_line_writtentest
+        curr_event["num_line_cashier"] = self.num_line_cashier
+        curr_event["day_counter"] = self.day_counter
+        self.df_time_table = self.df_time_table.append(curr_event, ignore_index=True)
+    
+    
     
     def event_E_CSH(self,curr_event):
         '''End cashier event'''
-        pass
+        
+        time = curr_event["time"]
+
+        # Action
+        self.idle_cashier_servers += 1
+
+        # Queue up more immediately if there is a line
+        if self.num_line_cashier >= self.idle_cashier_servers:
+            temp = {}
+            temp["time"] = time
+            temp["event"] = "B_CSH"
+            self.time_events_list.addNode(temp["time"], temp)
+            
+        # Customer exits system after cashier
+
+        # Log
+        curr_event["num_total_arrivals"] = self.num_total_arrivals
+        curr_event["num_line_checkin_inside"] = self.num_line_checkin_inside
+        curr_event["num_line_checkin_outside"] = self.num_line_checkin_outside
+        curr_event["num_line_camera"] = self.num_line_camera
+        curr_event["num_line_clerk"] = self.num_line_clerk
+        curr_event["num_line_roadtest"] = self.num_line_roadtest
+        curr_event["num_line_writtentest"] = self.num_line_writtentest
+        curr_event["num_line_cashier"] = self.num_line_cashier
+        curr_event["day_counter"] = self.day_counter
+        self.df_time_table = self.df_time_table.append(curr_event, ignore_index=True)
+        
+        
         
     def event_END_DAY(self,curr_event):
         '''Formal event to end the day, which will then start a new day if less than max days'''
@@ -437,7 +763,7 @@ class Simulation():
             self.event_B_CSH(temp)
         elif temp["event"] == "E_CSH":
             self.event_E_CSH(temp)
-        elif temp["event"] == "END_DAY"
+        elif temp["event"] == "END_DAY":
             self.event_END_DAY(temp)
 
         # Move head to next time
@@ -461,23 +787,7 @@ class Simulation():
         if len(self.df_time_table.duplicated(subset=['time']).unique()) == 2:
             return True
         return False
-    
-    def get_fraction_cars_balked(self):
-        return self.num_total_balks / self.num_total_arrivals
 
-    def get_distr_num_current_parked(self):
-        if self.get_distr_parked is None:
-            self.df_distr = pd.DataFrame()
-            self.df_distr['values'] = self.df_time_table["num_current_parked"][:-1]
-            self.df_distr["weights"] = self.df_time_table["time"].diff()[1:].reset_index(drop=True)
-            self.df_distr = self.df_distr.groupby("values").weights.sum()
-            self.df_distr = self.df_distr / self.df_distr.sum()
-            self.df_distr = self.df_distr.rename("Probabilities")
-        return self.df_distr
-
-    def get_avg_num_current_parked(self):
-        df_distr = self.get_distr_num_current_parked()
-        return np.dot(df_distr.index,df_distr)
 
 if __name__ == "__main__":
     # Notes (Written for ST's clarity, saved in case XP was confused too)
@@ -487,23 +797,24 @@ if __name__ == "__main__":
     # - Numpy takes the average as the input for the exponential function. The average of
     #   the exponential is 1/(the poisson rate)
 
-    total_run_time = 1440 # in hours
+    max_day_runtime = 1 # in hours
     seed = 53243
 
-    s = Simulation(total_run_time,rng_seed=seed)
+    s = Simulation(max_days = max_day_runtime, rng_seed = seed)
     print("With Normal Arrival Rate")
     print("------------------------")
-    print(f"a) {s.get_fraction_cars_balked():.3f}")
-    print(f"b) {s.get_distr_num_current_parked()}")
-    print(f"c) {s.get_avg_num_current_parked():.3f}")
+    print(s.master_df_time_table)
+    #print(f"a) {s.get_fraction_cars_balked():.3f}")
+    #print(f"b) {s.get_distr_num_current_parked()}")
+    #print(f"c) {s.get_avg_num_current_parked():.3f}")
     
     # print(f"Has Phantom) {s.has_phantom()}")     # Was False
 
-    s = Simulation(total_run_time,rng_seed=seed,increased_arrival_rate=12)
-    print("\n With Increased Arrival Rate")
-    print("---------------------------")
-    print(f"a) {s.get_fraction_cars_balked():.3f}")
-    print(f"b) {s.get_distr_num_current_parked()}")
-    print(f"c) {s.get_avg_num_current_parked():.3f}")
+    #s = Simulation(total_run_time,rng_seed=seed,increased_arrival_rate=12)
+    #print("\n With Increased Arrival Rate")
+    #print("---------------------------")
+    #print(f"a) {s.get_fraction_cars_balked():.3f}")
+    #print(f"b) {s.get_distr_num_current_parked()}")
+    #print(f"c) {s.get_avg_num_current_parked():.3f}")
     
     # print(f"Has Phantom) {s.has_phantom()}")    # Was False
