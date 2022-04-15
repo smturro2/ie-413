@@ -25,9 +25,9 @@ from numpy.random import default_rng
 
 class Simulation():
     def __init__(self, max_days = 120, rng_seed = None,
-               checkin_rate = 40, roadtest_rate = 2, camera_rate = 2, 
-               clerk_rate = 1, writtentest_rate = 0.5, cashier_rate = 3,
-               decreased_arrival_rate = 20, increased_arrival_rate = 70,
+               checkin_rate = 60, roadtest_rate = 3, camera_rate = 80, 
+               clerk_rate = 20, writtentest_rate = 3, cashier_rate = 40,
+               decreased_arrival_rate = 30, increased_arrival_rate = 80,
                allocation_policy = None):
               
         # Random number generator
@@ -48,17 +48,17 @@ class Simulation():
         self.increased_arrival_rate = increased_arrival_rate
         self.allocation_policy = allocation_policy
         
-        if self.allocation_policy == None:
-            self.idle_checkin_servers = 1
-            self.idle_camera_servers = 2
-            self.idle_roadtest_servers = 2
-            self.idle_writtentest_servers = 4
-            self.idle_clerk_servers = 15
-            self.idle_cashier_servers = 1
+        if self.allocation_policy == None: # not realistic
+            self.idle_checkin_servers = 5
+            self.idle_camera_servers = 5
+            self.idle_roadtest_servers = 5
+            self.idle_writtentest_servers = 5
+            self.idle_clerk_servers = 20
+            self.idle_cashier_servers = 5
         elif self.allocation_policy == 'dynamic':
             self.idle_checkin_servers = 3
             self.idle_camera_servers = 2
-            self.idle_roadtest_servers = 1
+            self.idle_roadtest_servers = 2
             self.idle_writtentest_servers = 4
             self.idle_clerk_servers = 15
             self.idle_cashier_servers = 1
@@ -800,7 +800,7 @@ if __name__ == "__main__":
     max_day_runtime = 1 # in hours
     seed = 53243
 
-    s = Simulation(max_days = max_day_runtime, rng_seed = seed)
+    s = Simulation(max_days = max_day_runtime, rng_seed = seed, allocation_policy = None)
     print("With Normal Arrival Rate")
     print("------------------------")
     print(s.master_df_time_table)
