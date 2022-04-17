@@ -122,7 +122,6 @@ class Simulation():
 
 
         self.num_line_checkin_outside = self.rng_generator.normal(50,10)
-        self.num_line_checkin_outside = 0
         self.num_total_arrivals += self.num_line_checkin_outside
         
         
