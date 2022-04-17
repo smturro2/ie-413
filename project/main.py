@@ -5,17 +5,20 @@ from sorted_linked_list import LinkedList
 from numpy.random import default_rng
 
 # Done:
-# all events are done, code runs 
+# - People move from RT/WT to the clerk before the cashier
+# - got good estimates for transition probabilities, arrival rate see .ipynb
+# - Got rid of allocation policy -> Changed these to be inputs to the model.
+#   These are the only things that we could change at the dmv.
+# - Changed rates to avg time to complete for better estimation
 
 # To do: 
 # Run it for a single day, check that the master_df_time_table is what we expect (non-neg, etc)
 # Change nonempty conditions to be random (uniform 30-70? Is it even needed?)
-# LinkedList: Add priority P > B for initial processing, both have time 0 
-# Implement dynamic allocation_policy
-# Fewer servers on lunch break?
+# LinkedList: Add priority P > B for initial processing, both have time 0
 # Data storage for output metrics
 # Functions to calculate output metrics
-# Change numbers for rates, capacity, etc. 
+# test with 0 people starting in line. Does it work as expected?
+# double check estimates for how long each process takes
 
 # Overall Notes
 # - Moved creation of df_time_table to event_I so that it can be reset each day. Master table is in __init__
@@ -25,67 +28,47 @@ from numpy.random import default_rng
 
 class Simulation():
     def __init__(self, max_days = 120, rng_seed = None,
-               checkin_rate = 60, roadtest_rate = 3, camera_rate = 80, 
-               clerk_rate = 20, writtentest_rate = 3, cashier_rate = 40,
-               decreased_arrival_rate = 30, increased_arrival_rate = 80,
-               allocation_policy = None):
-              
-        # Random number generator
-        self.rng_generator = default_rng(rng_seed)
-     
-        # Master DataFrame where daily data is appended
-        self.master_df_time_table = pd.DataFrame()
-        
+                 inside_capacity = 25,idle_checkin_servers = 3,idle_camera_servers = 2,
+                 idle_roadtest_servers = 7,idle_writtentest_servers = 8,idle_clerk_servers = 20,
+                 idle_cashier_servers = 3):
 
+        self.rng_generator = default_rng(rng_seed)
+        self.master_df_time_table = pd.DataFrame() # Each daily data is appended
         self.time_events_list = LinkedList()
-        self.checkin_rate = checkin_rate
-        self.roadtest_rate = roadtest_rate
-        self.camera_rate = camera_rate
-        self.clerk_rate = clerk_rate
-        self.writtentest_rate = writtentest_rate
-        self.cashier_rate = cashier_rate
-        self.decreased_arrival_rate = decreased_arrival_rate
-        self.increased_arrival_rate = increased_arrival_rate
-        self.allocation_policy = allocation_policy
         
-        if self.allocation_policy == None: # not realistic
-            self.idle_checkin_servers = 5
-            self.idle_camera_servers = 5
-            self.idle_roadtest_servers = 5
-            self.idle_writtentest_servers = 5
-            self.idle_clerk_servers = 20
-            self.idle_cashier_servers = 5
-        elif self.allocation_policy == 'dynamic':
-            self.idle_checkin_servers = 3
-            self.idle_camera_servers = 2
-            self.idle_roadtest_servers = 2
-            self.idle_writtentest_servers = 4
-            self.idle_clerk_servers = 15
-            self.idle_cashier_servers = 1
-        
-        # Capacity for check-in line inside. Infinite buffer outside
-        # Static DMV characteristics; laws
-        self.inside_capacity = 25
-        self.workday_length = 9.5 # hours
-        
-        # Probability of moving from checkin to a different station in the DMV
-        self.p_checkin_camera = 0.85
-        self.p_checkin_clerk = 0.15
-        
-        # Probability of moving from camera to a different station in the DMV
-        self.p_camera_clerk = 0.90
-        self.p_camera_roadtest = 0.05
-        self.p_camera_writtentest = 0.05
-        
-        # Increased arrival rate times, 7:30-5:00 workday assuming. In hours
-        self.morning_rush_end = 0.5 # until 8:00
-        self.lunch_rush_start = 3.5 # 11:00 start
-        self.lunch_rush_end = 6.5 # 2:00 end
-        
+        # How long each process takes
+        self.checkin_avg_time = 1 / 60
+        self.roadtest_avg_time = 20 / 60
+        self.camera_avg_time = 1 / 60
+        self.clerk_avg_time = 15 / 60
+        self.writtentest_avg_time = 5 / 60
+        self.cashier_avg_time = 1 / 60
+
+        # Increased arrival rates. 7:30-5:00 workday assuming. In hours
+        self.morning_rush_end = 0.5  # until 8:00
+        self.lunch_rush_start = 3.5  # 11:00 start
+        self.lunch_rush_end = 6.5  # 2:00 end
+        self.workday_length = 9.5  # Close at 5:00
+        self.decreased_arrival_rate = 110
+        self.increased_arrival_rate = 160
+
+        # Probability of moving from *** to ***
+        self.p_checkin_camera = .664
+        self.p_checkin_clerk = .336
+        self.p_camera_clerk = .206
+        self.p_camera_roadtest = .18
+        self.p_camera_writtentest = .614
+
+        # Number of servers
+        self.inside_capacity = inside_capacity
+        self.idle_checkin_servers = idle_checkin_servers
+        self.idle_camera_servers = idle_camera_servers
+        self.idle_roadtest_servers = idle_roadtest_servers
+        self.idle_writtentest_servers = idle_writtentest_servers
+        self.idle_clerk_servers = idle_clerk_servers
+        self.idle_cashier_servers = idle_cashier_servers
+
         # Others
-        
-        self.num_total_arrivals = None
-        
         self.event_list_empty = False
         self.max_days = max_days
         self.day_counter = 0 
@@ -113,7 +96,6 @@ class Simulation():
 
         # Action
         self.num_total_arrivals = 0
-        
         self.num_line_checkin_inside = 0
         self.num_line_checkin_outside = 0
         self.num_line_camera = 0
@@ -193,6 +175,7 @@ class Simulation():
         
         # Action
         self.num_total_arrivals += 0 # Already accounted for in event_I for simplicity
+        # todo get rid of this?
         
         
         # Mode 1: let all people inside the building
@@ -303,7 +286,7 @@ class Simulation():
 
         # Queue an End Check-in
         temp = {}
-        t_ci = self.rng_generator.exponential(1 / self.checkin_rate)
+        t_ci = self.rng_generator.exponential(self.checkin_avg_time)
         temp["time"] = time + t_ci
         temp["event"] = "E_CI"
         self.time_events_list.addNode(temp["time"], temp)
@@ -379,7 +362,7 @@ class Simulation():
 
         # Queue an End Camera
         temp = {}
-        t_cam = self.rng_generator.exponential(1 / self.camera_rate)
+        t_cam = self.rng_generator.exponential(self.camera_avg_time)
         temp["time"] = time + t_cam
         temp["event"] = "E_CAM"
         self.time_events_list.addNode(temp["time"], temp)
@@ -461,7 +444,7 @@ class Simulation():
 
         # Queue an End Check-in
         temp = {}
-        t_clk = self.rng_generator.exponential(1 / self.clerk_rate)
+        t_clk = self.rng_generator.exponential(self.clerk_avg_time)
         temp["time"] = time + t_clk
         temp["event"] = "E_CLK"
         self.time_events_list.addNode(temp["time"], temp)
@@ -486,8 +469,6 @@ class Simulation():
 
         # Action
         self.idle_clerk_servers += 1
-
-        # Queue up more immediately if there is a line
         if self.num_line_clerk >= self.idle_clerk_servers:
             temp = {}
             temp["time"] = time
@@ -527,7 +508,7 @@ class Simulation():
 
         # Queue an End Road Test
         temp = {}
-        t_rt = self.rng_generator.exponential(1 / self.roadtest_rate)
+        t_rt = self.rng_generator.exponential(self.roadtest_avg_time)
         temp["time"] = time + t_rt
         temp["event"] = "E_RT"
         self.time_events_list.addNode(temp["time"], temp)
@@ -561,12 +542,12 @@ class Simulation():
             temp["event"] = "B_RT"
             self.time_events_list.addNode(temp["time"], temp)
             
-        # Always transfer customer to cashier, camera happened before
-        self.num_line_cashier += 1
-        if self.idle_cashier_servers > 0:
+        # Always transfer customer to clerk
+        self.num_line_clerk += 1
+        if self.idle_clerk_servers > 0:
             temp = {}
             temp["time"] = time
-            temp["event"] = "B_CSH"
+            temp["event"] = "B_CLK"
             self.time_events_list.addNode(temp["time"], temp)
 
         # Log
@@ -594,7 +575,7 @@ class Simulation():
 
         # Queue an End Written Test
         temp = {}
-        t_wt = self.rng_generator.exponential(1 / self.writtentest_rate)
+        t_wt = self.rng_generator.exponential(self.writtentest_avg_time)
         temp["time"] = time + t_wt
         temp["event"] = "E_WT"
         self.time_events_list.addNode(temp["time"], temp)
@@ -628,12 +609,12 @@ class Simulation():
             temp["event"] = "B_WT"
             self.time_events_list.addNode(temp["time"], temp)
             
-        # Always transfer customer to cashier, camera happened before
-        self.num_line_cashier += 1
-        if self.idle_cashier_servers > 0:
+        # Always transfer customer to clerk
+        self.num_line_clerk += 1
+        if self.idle_clerk_servers > 0:
             temp = {}
             temp["time"] = time
-            temp["event"] = "B_CSH"
+            temp["event"] = "B_CLK"
             self.time_events_list.addNode(temp["time"], temp)
 
         # Log
@@ -661,7 +642,7 @@ class Simulation():
 
         # Queue an End Check-in
         temp = {}
-        t_csh = self.rng_generator.exponential(1 / self.cashier_rate)
+        t_csh = self.rng_generator.exponential(self.cashier_avg_time)
         temp["time"] = time + t_csh
         temp["event"] = "E_CSH"
         self.time_events_list.addNode(temp["time"], temp)
@@ -800,7 +781,7 @@ if __name__ == "__main__":
     max_day_runtime = 1 # in hours
     seed = 53243
 
-    s = Simulation(max_days = max_day_runtime, rng_seed = seed, allocation_policy = None)
+    s = Simulation(max_days = max_day_runtime, rng_seed = seed)
     print("With Normal Arrival Rate")
     print("------------------------")
     print(s.master_df_time_table)
@@ -810,7 +791,7 @@ if __name__ == "__main__":
     
     # print(f"Has Phantom) {s.has_phantom()}")     # Was False
 
-    #s = Simulation(total_run_time,rng_seed=seed,increased_arrival_rate=12)
+    #s = Simulation(total_run_time,rng_seed=seed,increased_arrival_avg_time=12)
     #print("\n With Increased Arrival Rate")
     #print("---------------------------")
     #print(f"a) {s.get_fraction_cars_balked():.3f}")
