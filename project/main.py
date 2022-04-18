@@ -10,6 +10,7 @@ from numpy.random import default_rng
 # - Got rid of allocation policy -> Changed these to be inputs to the model.
 # - Changed rates to avg time to complete for better estimation
 # - Changed nonempty conditions to be random normal mean = 50, std = 10
+# - Round initial arrivals
 
 # To do:
 # - line 264 -> should we be using the P event?
@@ -29,6 +30,10 @@ from numpy.random import default_rng
 # - Time is in hours, max_days is days
 # - Slide 117 of Chapter 1 has the event graph for multi-server; it was helpful to make sure stuff is being tracked correctly
 # - XP added some general comments to Project Proposal document about flow of customers
+
+# New Notes as of 4/18
+# - Swapped order of P and B_CI in Mode 2 of P: the reason P does not change any numbers is because it calls a new B_CI
+# - Fixed # of people to let into system initially (= inside_capacity)
 
 class Simulation():
     def __init__(self, max_days = 120, rng_seed = None,
@@ -120,8 +125,8 @@ class Simulation():
         self.num_to_initially_letinside = 0 # Number of people to let in when doors open, including those who will be served
         self.num_to_initially_serve = 0 # Number of people to let in and serve when doors open
 
-
-        self.num_line_checkin_outside = self.rng_generator.normal(50,10)
+        
+        self.num_line_checkin_outside = np.max([0, round(self.rng_generator.normal(50,10))]) # assert positive and integer
         self.num_total_arrivals += self.num_line_checkin_outside
         
         
@@ -131,13 +136,13 @@ class Simulation():
             self.num_to_initially_serve = self.num_line_checkin_outside
             self.num_to_initially_letinside = self.num_to_initially_serve
             
-        elif self.num_line_checkin_outside <= self.inside_capacity + self.idle_checkin_servers:
+        elif self.num_line_checkin_outside < self.inside_capacity:
             self.num_to_initially_serve = self.idle_checkin_servers
             self.num_to_initially_letinside = self.num_line_checkin_outside
             
         else: # When there are more people outside than servers and inside capacity
             self.num_to_initially_serve = self.idle_checkin_servers
-            self.num_to_initially_letinside = self.inside_capacity + self.num_to_initially_serve
+            self.num_to_initially_letinside = self.inside_capacity
                     
         if self.num_to_initially_serve >= 1:
             temp = {}
@@ -199,16 +204,17 @@ class Simulation():
             self.num_to_initially_serve -= 1
             
             # Schedule more events
+            if self.num_to_initially_serve >= 0:
+                temp = {}
+                temp["time"] = time
+                temp["event"] = "B_CI"
+                self.time_events_list.addNode(temp["time"], temp)  
             if self.num_to_initially_serve > 0:
                 temp = {}
                 temp["time"] = time
                 temp["event"] = "P"
                 self.time_events_list.addNode(temp["time"], temp)
-            if self.num_to_initially_serve >= 0:
-                temp = {}
-                temp["time"] = time
-                temp["event"] = "B_CI"
-                self.time_events_list.addNode(temp["time"], temp)                      
+                    
             
         # Log
         self.log(curr_event)
@@ -592,20 +598,26 @@ class Simulation():
     def event_END_DAY(self,curr_event):
         '''Formal event to end the day, which will then start a new day if less than max days'''
         
+        # Log
+        self.log(curr_event)
+        
         # Store today's results to the master table
         self.master_df_time_table = self.master_df_time_table.append(self.df_time_table, ignore_index=True)
+        
+        print("length of master:", len(self.master_df_time_table))
         
         # Increment day_counter
         self.day_counter += 1
         
         # If there are more days to simulate, add event_I to events list to initialize new day
-        # Don't think can call run() again because it will call run() inside original run()
         if self.day_counter < self.max_days:
             temp = {}
             temp["time"] = 0
             temp["event"] = "I"
             self.time_events_list.addNode(temp["time"],temp)
+            print(self.time_events_list)
         
+
         
         
     def update(self):
@@ -672,7 +684,9 @@ if __name__ == "__main__":
     max_days = 1
     seed = 53243
 
-    s = Simulation(max_days = max_days, rng_seed = seed,idle_checkin_servers = 30)
+    s = Simulation(max_days = max_days, rng_seed = seed,idle_checkin_servers = 3)
     print(s.master_df_time_table)
+    #print(s.master_df_time_table.iloc[0:50, 0:8])
+    print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'END_DAY'])
     
     # print(f"Has Phantom) {s.has_phantom()}")     # Was False
