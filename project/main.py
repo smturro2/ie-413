@@ -5,25 +5,20 @@ from sorted_linked_list import LinkedList
 from numpy.random import default_rng
 
 # Done:
-# - Remodeled system to math that of a californian DMV. See powerpoint slide for updated model
-# - got better estimates for transition probabilities, arrival rate see .ipynb
-# - Got rid of allocation policy -> Changed these to be inputs to the model.
-# - Changed rates to avg time to complete for better estimation
-# - Changed nonempty conditions to be random normal mean = 50, std = 10
-# - Round initial arrivals
+# - Rounded initial arrivals
 # - P events
 #       - LinkedList: Add priority P > B for initial processing, both have time 0 - NOT DONE EXPLICITLY BUT WORKS
 #       - test with 0 people starting in line. Does it work as expected? - Works for starting = 0, <
 #       - Same P event logged twice during the last two events of the initial let in. - Reversed order of B_CI and P so looks better
-# - line 264 -> should we be using the P event? - 
 # - END_DAY functional, runs multiple days using a 100*day_counter ticker
+# - Output metrics done
+# - Finalize estimates for service times and number of servers
+
 
 # To do:
-
-# - How to track output metrics
-#       Average wait time
-#       Average number of people
-#       Max number of people in each line
+# - Average wait time
+#    How should we handle the arrival times of the people in line when we open?
+#       Have about 50 people with arrival time of 0?
 # check Percent fails = 1/3
 # check avg arrivals per day is = 137
 
@@ -42,16 +37,17 @@ from numpy.random import default_rng
 class Simulation():
     def __init__(self, max_days = 120, rng_seed = None,
                  inside_capacity = 25,idle_checkin_servers = 3,idle_camera_servers = 2,
-                 idle_roadtest_servers = 7,idle_writtentest_servers = 8,idle_clerk_servers = 20,
+                 idle_roadtest_servers = 9,idle_writtentest_servers = 8,idle_clerk_servers = 20,
                  idle_cashier_servers = 3):
 
         self.rng_generator = default_rng(rng_seed)
         self.master_df_time_table = pd.DataFrame() # Each daily data is appended
+        self.master_output_table = pd.DataFrame() # Each daily data outputs are appended
         self.time_events_list = LinkedList()
         
         # How long each process takes
-        self.checkin_avg_time = 1 / 60
-        self.roadtest_avg_time = 20 / 60
+        self.checkin_avg_time = 2 / 60
+        self.roadtest_avg_time = 15 / 60
         self.camera_avg_time = 1 / 60
         self.clerk_avg_time = 15 / 60
         self.writtentest_avg_time = 5 / 60
@@ -84,13 +80,6 @@ class Simulation():
         self.idle_writtentest_servers = idle_writtentest_servers
         self.idle_clerk_servers = idle_clerk_servers
         self.idle_cashier_servers = idle_cashier_servers
-
-        # Queue arrival and departure times
-        self.queue_times = {}
-        queues = ["outside","inside","wt","rt","cam","clk","csh"]
-        for q in queues:
-            for i in ["arrive","depart"]:
-                self.queue_times[q+"_"+i] = list()
 
         # Others
         self.event_list_empty = False
@@ -126,6 +115,13 @@ class Simulation():
         
         # Dataframe table for each day 
         self.df_time_table = pd.DataFrame()
+
+        # Queue arrival and departure times
+        self.queue_times = {}
+        queues = ["outside","inside","wt","rt","cam","clk","csh"]
+        for q in queues:
+            for i in ["arrive","depart"]:
+                self.queue_times[q+"_"+i] = list()
 
         # Action
         self.num_total_arrivals = 0
@@ -667,7 +663,10 @@ class Simulation():
         
         # Store today's results to the master table
         self.master_df_time_table = self.master_df_time_table.append(self.df_time_table, ignore_index=True)
-                
+        # Store avg weight times
+        self.master_output_table = self.master_output_table.append(self.get_outputs(), ignore_index=True)
+
+
         # Increment day_counter
         self.day_counter += 1
         
@@ -738,55 +737,59 @@ class Simulation():
             return True
         return False
 
-    def get_avg_wait_times(self):
+    def get_outputs(self):
         queues = ["outside", "inside", "wt", "rt", "cam", "clk", "csh"]
-        avg_wait_times = {}
+        outputs = {}
         for q in queues:
-            avg_wait_times[q] = np.array(s.queue_times[q + "_depart"]) - s.queue_times[q + "_arrive"]
-            print("\n" + q)
-            print(all(avg_wait_times[q] >= 0))
-            avg_wait_times[q] = avg_wait_times[q].mean()
-            print(avg_wait_times[q] > 0)
+            outputs["wait_time_"+q] = np.array(self.queue_times[q + "_depart"]) - self.queue_times[q + "_arrive"]
+            outputs["wait_time_"+q] = outputs["wait_time_"+q].mean()
 
         # total
-        avg_wait_times["total"] = avg_wait_times["outside"] + avg_wait_times["inside"] +\
+        outputs["wait_time_total"] = outputs["wait_time_outside"] + outputs["wait_time_inside"] +\
                                   self.checkin_avg_time
-        avg_wait_times["total"] += self.p_checkin_written * (avg_wait_times["wt"]+
+        outputs["wait_time_total"] += self.p_checkin_written * (outputs["wait_time_wt"]+
                                                              self.writtentest_avg_time +
-                                                             avg_wait_times["csh"] +
+                                                             outputs["wait_time_csh"] +
                                                              self.cashier_avg_time)
-        avg_wait_times["total"] += self.p_checkin_clerk * (avg_wait_times["clk"]+
+        outputs["wait_time_total"] += self.p_checkin_clerk * (outputs["wait_time_clk"]+
                                                              self.clerk_avg_time +
                                                            (1-self.p_clerk_fail)*(
-                                                             avg_wait_times["csh"] +
+                                                             outputs["wait_time_csh"] +
                                                              self.cashier_avg_time)
                                                            )
-        avg_wait_times["total"] += self.p_checkin_camera * (avg_wait_times["cam"]+
+        outputs["wait_time_total"] += self.p_checkin_camera * (outputs["wait_time_cam"]+
                                                              self.camera_avg_time +
                                                            (1-self.p_clerk_fail)*(
-                                                             avg_wait_times["csh"] +
+                                                             outputs["wait_time_csh"] +
                                                              self.cashier_avg_time)
                                                            )
-        avg_wait_times["total"] += self.p_checkin_driving * (avg_wait_times["rt"]+
+        outputs["wait_time_total"] += self.p_checkin_driving * (outputs["wait_time_rt"]+
                                                              self.roadtest_avg_time +
-                                                             avg_wait_times["csh"] +
+                                                             outputs["wait_time_csh"] +
                                                              self.cashier_avg_time +
                                                              (1-self.p_road_fail)*
-                                                             (avg_wait_times["cam"] +
+                                                             (outputs["wait_time_cam"] +
                                                               self.camera_avg_time +
                                                               (1 - self.p_clerk_fail) * (
-                                                                      avg_wait_times["csh"] +
+                                                                      outputs["wait_time_csh"] +
                                                                       self.cashier_avg_time)
                                                               )
                                                              )
-
-        return avg_wait_times
+        outputs["total_arrivals"] = self.df_time_table.iloc[-1]["num_total_arrivals"]
+        outputs["total_fails"] = self.df_time_table.iloc[-1]["num_fails"]
+        self.df_distr = self.df_time_table[self.df_time_table.columns[3:-2]][:-1]
+        self.df_distr["weights"] = self.df_time_table["time"].diff()[1:].reset_index(drop=True)
+        self.df_distr["weights"] = self.df_distr["weights"] / self.df_distr["weights"].sum()
+        for c in self.df_distr.columns[:-1]:
+            outputs["avg_"+c] = np.dot(self.df_distr[c],self.df_distr["weights"])
+            outputs["max_"+c] = np.max(self.df_distr[c])
+        return outputs
 
 
 
 if __name__ == "__main__":
 
-    max_days = 1
+    max_days = 5
     seed = 53243
 
     s = Simulation(max_days = max_days, inside_capacity = 25, rng_seed = seed, idle_checkin_servers = 5)
@@ -795,9 +798,7 @@ if __name__ == "__main__":
     print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'END_DAY'])
     print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'I'])
 
-
-    # Average wait times
-    avg_wait_times = s.get_avg_wait_times()
-    print(avg_wait_times["total"])
-
+    # Check arrivals and fail rate
+    print(s.master_output_table["total_arrivals"]) # True average is 1352
+    print(s.master_output_table["total_fails"]/s.master_output_table["total_arrivals"]) # True percent is 1/3
     # print(f"Has Phantom) {s.has_phantom()}")     # Was False
