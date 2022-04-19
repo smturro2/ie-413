@@ -11,14 +11,15 @@ from numpy.random import default_rng
 # - Changed rates to avg time to complete for better estimation
 # - Changed nonempty conditions to be random normal mean = 50, std = 10
 # - Round initial arrivals
+# - P events
+#       - LinkedList: Add priority P > B for initial processing, both have time 0 - NOT DONE EXPLICITLY BUT WORKS
+#       - test with 0 people starting in line. Does it work as expected? - Works for starting = 0, <
+#       - Same P event logged twice during the last two events of the initial let in. - Reversed order of B_CI and P so looks better
+# - line 264 -> should we be using the P event? - 
+# - END_DAY functional, runs multiple days using a 100*day_counter ticker
 
 # To do:
-# - line 264 -> should we be using the P event?
-# - P events
-#       - LinkedList: Add priority P > B for initial processing, both have time 0
-#       - test with 0 people starting in line. Does it work as expected?
-#       - Same P event logged twice during the last two events of the initial let in.
-# - Doesn't run for multiple days
+
 # - How to track output metrics
 #       Average wait time
 #       Average number of people
@@ -31,9 +32,12 @@ from numpy.random import default_rng
 # - Slide 117 of Chapter 1 has the event graph for multi-server; it was helpful to make sure stuff is being tracked correctly
 # - XP added some general comments to Project Proposal document about flow of customers
 
-# New Notes as of 4/18
+# XP Explanation Notes 4/18 4/19
 # - Swapped order of P and B_CI in Mode 2 of P: the reason P does not change any numbers is because it calls a new B_CI
 # - Fixed # of people to let into system initially (= inside_capacity)
+# - Naive solution to end_day: LinkedList can't go back in time, so need to set time for future days >= t(END_DAY) = self.m
+# - Lines 132-141 readjust arrival cutoff windows to match day modulus, 630 in END_DAY
+# - From XP's experience, many more ppl went to clerk than WT or RT, possibly due to RealID mandate (check/consider rates?)
 
 class Simulation():
     def __init__(self, max_days = 120, rng_seed = None,
@@ -85,6 +89,9 @@ class Simulation():
         self.event_list_empty = False
         self.max_days = max_days
         self.day_counter = 0 
+        self.m = 100 # day modulus to differentiate time of each day
+        
+        print(f'Running Simulation for {self.max_days} days...')
 
         self.run()
 
@@ -108,6 +115,8 @@ class Simulation():
         '''Initialization event, marking the beginning of a new day. Resets variables that reset per day'''
         time = curr_event["time"]
         
+        print(f'Beginning day {self.day_counter}...')
+        
         # Dataframe table for each day 
         self.df_time_table = pd.DataFrame()
 
@@ -121,6 +130,14 @@ class Simulation():
         self.num_line_writtentest = 0
         self.num_line_cashier = 0
         self.num_fails = 0
+        
+        ###
+        # Fix times to be scaled based on day_counter for determing arrival cutoff times
+        ###
+        self.morning_rush_end = 0.5 + self.m*self.day_counter # until 8:00
+        self.lunch_rush_start = 3.5 + self.m*self.day_counter # 11:00 start
+        self.lunch_rush_end = 6.5 + self.m*self.day_counter # 2:00 end
+        self.workday_length = 9.5 +self.m*self.day_counter # Close at 5:00
         
         self.num_to_initially_letinside = 0 # Number of people to let in when doors open, including those who will be served
         self.num_to_initially_serve = 0 # Number of people to let in and serve when doors open
@@ -160,9 +177,8 @@ class Simulation():
         self.time_events_list.addNode(temp["time"], temp)
         
         # Queue END_DAY
-        M = 1000
         temp = {}
-        temp["time"] = time + M # far enough into the future such that it will be the last event
+        temp["time"] = time + self.m # far enough into the future such that it will be the last event
         temp["event"] = "END_DAY"
         self.time_events_list.addNode(temp["time"], temp)
 
@@ -598,26 +614,24 @@ class Simulation():
     def event_END_DAY(self,curr_event):
         '''Formal event to end the day, which will then start a new day if less than max days'''
         
-        # Log
+        print(f'Ending day {self.day_counter}...')
+        
+        # Log, store results of just-finished day
         self.log(curr_event)
         
         # Store today's results to the master table
         self.master_df_time_table = self.master_df_time_table.append(self.df_time_table, ignore_index=True)
-        
-        print("length of master:", len(self.master_df_time_table))
-        
+                
         # Increment day_counter
         self.day_counter += 1
         
         # If there are more days to simulate, add event_I to events list to initialize new day
         if self.day_counter < self.max_days:
             temp = {}
-            temp["time"] = 0
+            temp["time"] = self.m * self.day_counter
             temp["event"] = "I"
             self.time_events_list.addNode(temp["time"],temp)
-            print(self.time_events_list)
-        
-
+            
         
         
     def update(self):
@@ -681,12 +695,15 @@ class Simulation():
 
 if __name__ == "__main__":
 
-    max_days = 1
+    max_days = 3
     seed = 53243
 
-    s = Simulation(max_days = max_days, rng_seed = seed,idle_checkin_servers = 3)
+    s = Simulation(max_days = max_days, inside_capacity = 25, rng_seed = seed, idle_checkin_servers = 5)
+    
     print(s.master_df_time_table)
-    #print(s.master_df_time_table.iloc[0:50, 0:8])
+    # print(s.master_df_time_table.iloc[0:50,0:6])
     print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'END_DAY'])
+    print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'I'])
+
     
     # print(f"Has Phantom) {s.has_phantom()}")     # Was False
