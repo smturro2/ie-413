@@ -85,6 +85,13 @@ class Simulation():
         self.idle_clerk_servers = idle_clerk_servers
         self.idle_cashier_servers = idle_cashier_servers
 
+        # Queue arrival and departure times
+        self.queue_times = {}
+        queues = ["outside","inside","wt","rt","cam","clk","csh"]
+        for q in queues:
+            for i in ["arrive","depart"]:
+                self.queue_times[q+"_"+i] = list()
+
         # Others
         self.event_list_empty = False
         self.max_days = max_days
@@ -145,8 +152,8 @@ class Simulation():
         
         self.num_line_checkin_outside = np.max([0, round(self.rng_generator.normal(50,10))]) # assert positive and integer
         self.num_total_arrivals += self.num_line_checkin_outside
-        
-        
+        # Add arrivals to list
+        self.queue_times["outside_arrive"].extend([time]*self.num_line_checkin_outside)
                 
         # Queue P, initial processing of letting people and assigning a server if open
         if self.num_line_checkin_outside <= self.idle_checkin_servers: # Fewer people outside than servers
@@ -206,7 +213,10 @@ class Simulation():
             self.num_to_initially_letinside -= 1
             self.num_line_checkin_outside -= 1
             self.num_line_checkin_inside += 1
-            
+            # Add queue arrivals/departures to list
+            self.queue_times["outside_depart"].append(time)
+            self.queue_times["inside_arrive"].append(time)
+
             # Schedule more events
             if self.num_to_initially_letinside > 0:
                 temp = {}
@@ -244,9 +254,13 @@ class Simulation():
 
         # Action
         self.num_total_arrivals += 1
+        # Add queue arrivals/departures to list
+        self.queue_times["outside_arrive"].append(time)
         
         if self.num_line_checkin_inside < self.inside_capacity:
             self.num_line_checkin_inside += 1
+            self.queue_times["outside_depart"].append(time)
+            self.queue_times["inside_arrive"].append(time)
         else:
             self.num_line_checkin_outside += 1
 
@@ -283,11 +297,15 @@ class Simulation():
         # Action
         self.idle_checkin_servers -= 1
         self.num_line_checkin_inside -= 1
+        # Add queue arrivals/departures to list
+        self.queue_times["inside_depart"].append(time)
         
         # Let someone inside if someone is waiting outside
         if self.num_line_checkin_outside > 0:
             self.num_line_checkin_outside -= 1
             self.num_line_checkin_inside += 1
+            self.queue_times["outside_depart"].append(time)
+            self.queue_times["inside_arrive"].append(time)
 
         # Queue an End Check-in
         temp = {}
@@ -320,6 +338,8 @@ class Simulation():
         rng = self.rng_generator.random()
         if rng < self.p_checkin_written:
             self.num_line_writtentest += 1
+            # Add queue arrivals/departures to list
+            self.queue_times["wt_arrive"].append(time)
             if self.idle_writtentest_servers > 0:
                 temp = {}
                 temp["time"] = time
@@ -327,6 +347,8 @@ class Simulation():
                 self.time_events_list.addNode(temp["time"], temp)
         elif rng < self.p_checkin_written+self.p_checkin_clerk:
             self.num_line_clerk += 1
+            # Add queue arrivals/departures to list
+            self.queue_times["clk_arrive"].append(time)
             if self.idle_clerk_servers > 0:
                 temp = {}
                 temp["time"] = time
@@ -334,6 +356,8 @@ class Simulation():
                 self.time_events_list.addNode(temp["time"], temp)
         elif rng < self.p_checkin_written+self.p_checkin_clerk+self.p_checkin_camera:
             self.num_line_camera += 1
+            # Add queue arrivals/departures to list
+            self.queue_times["cam_arrive"].append(time)
             if self.idle_camera_servers > 0:
                 temp = {}
                 temp["time"] = time
@@ -342,6 +366,8 @@ class Simulation():
         elif rng < self.p_checkin_written+self.p_checkin_clerk+self.p_checkin_camera+\
                 self.p_checkin_driving:
             self.num_line_roadtest += 1
+            # Add queue arrivals/departures to list
+            self.queue_times["rt_arrive"].append(time)
             if self.idle_roadtest_servers > 0:
                 temp = {}
                 temp["time"] = time
@@ -364,6 +390,8 @@ class Simulation():
         # Action
         self.idle_camera_servers -= 1
         self.num_line_camera -= 1
+        # Add queue arrivals/departures to list
+        self.queue_times["cam_depart"].append(time)
 
         # Queue an End Camera
         temp = {}
@@ -393,6 +421,8 @@ class Simulation():
             
         # Transfer to clerk
         self.num_line_clerk += 1
+        # Add queue arrivals/departures to list
+        self.queue_times["clk_arrive"].append(time)
         if self.idle_clerk_servers > 0:
             temp = {}
             temp["time"] = time
@@ -412,6 +442,8 @@ class Simulation():
         # Action
         self.idle_clerk_servers -= 1
         self.num_line_clerk -= 1
+        # Add queue arrivals/departures to list
+        self.queue_times["clk_depart"].append(time)
 
         # Queue an End Clerk
         temp = {}
@@ -444,6 +476,8 @@ class Simulation():
             self.num_fails += 1
         else:
             self.num_line_cashier += 1
+            # Add queue arrivals/departures to list
+            self.queue_times["csh_arrive"].append(time)
             if self.idle_cashier_servers > 0:
                 temp = {}
                 temp["time"] = time
@@ -463,6 +497,8 @@ class Simulation():
         # Action
         self.idle_roadtest_servers -= 1
         self.num_line_roadtest -= 1
+        # Add queue arrivals/departures to list
+        self.queue_times["rt_depart"].append(time)
 
         # Queue an End Road Test
         temp = {}
@@ -497,6 +533,8 @@ class Simulation():
             # Fail
             self.num_fails += 1
             self.num_line_cashier += 1
+            # Add queue arrivals/departures to list
+            self.queue_times["csh_arrive"].append(time)
             if self.idle_cashier_servers > 0:
                 temp = {}
                 temp["time"] = time
@@ -504,6 +542,8 @@ class Simulation():
                 self.time_events_list.addNode(temp["time"], temp)
         else:
             self.num_line_camera += 1
+            # Add queue arrivals/departures to list
+            self.queue_times["cam_arrive"].append(time)
             if self.idle_camera_servers > 0:
                 temp = {}
                 temp["time"] = time
@@ -523,6 +563,8 @@ class Simulation():
         # Action
         self.idle_writtentest_servers -= 1
         self.num_line_writtentest -= 1
+        # Add queue arrivals/departures to list
+        self.queue_times["wt_depart"].append(time)
 
         # Queue an End Written Test
         temp = {}
@@ -557,6 +599,8 @@ class Simulation():
             # Fail
             self.num_fails += 1
         self.num_line_cashier += 1
+        # Add queue arrivals/departures to list
+        self.queue_times["csh_arrive"].append(time)
         if self.idle_cashier_servers > 0:
             temp = {}
             temp["time"] = time
@@ -576,6 +620,8 @@ class Simulation():
         # Action
         self.idle_cashier_servers -= 1
         self.num_line_cashier -= 1
+        # Add queue arrivals/departures to list
+        self.queue_times["csh_depart"].append(time)
 
         # Queue an End Check-in
         temp = {}
@@ -692,18 +738,66 @@ class Simulation():
             return True
         return False
 
+    def get_avg_wait_times(self):
+        queues = ["outside", "inside", "wt", "rt", "cam", "clk", "csh"]
+        avg_wait_times = {}
+        for q in queues:
+            avg_wait_times[q] = np.array(s.queue_times[q + "_depart"]) - s.queue_times[q + "_arrive"]
+            print("\n" + q)
+            print(all(avg_wait_times[q] >= 0))
+            avg_wait_times[q] = avg_wait_times[q].mean()
+            print(avg_wait_times[q] > 0)
+
+        # total
+        avg_wait_times["total"] = avg_wait_times["outside"] + avg_wait_times["inside"] +\
+                                  self.checkin_avg_time
+        avg_wait_times["total"] += self.p_checkin_written * (avg_wait_times["wt"]+
+                                                             self.writtentest_avg_time +
+                                                             avg_wait_times["csh"] +
+                                                             self.cashier_avg_time)
+        avg_wait_times["total"] += self.p_checkin_clerk * (avg_wait_times["clk"]+
+                                                             self.clerk_avg_time +
+                                                           (1-self.p_clerk_fail)*(
+                                                             avg_wait_times["csh"] +
+                                                             self.cashier_avg_time)
+                                                           )
+        avg_wait_times["total"] += self.p_checkin_camera * (avg_wait_times["cam"]+
+                                                             self.camera_avg_time +
+                                                           (1-self.p_clerk_fail)*(
+                                                             avg_wait_times["csh"] +
+                                                             self.cashier_avg_time)
+                                                           )
+        avg_wait_times["total"] += self.p_checkin_driving * (avg_wait_times["rt"]+
+                                                             self.roadtest_avg_time +
+                                                             avg_wait_times["csh"] +
+                                                             self.cashier_avg_time +
+                                                             (1-self.p_road_fail)*
+                                                             (avg_wait_times["cam"] +
+                                                              self.camera_avg_time +
+                                                              (1 - self.p_clerk_fail) * (
+                                                                      avg_wait_times["csh"] +
+                                                                      self.cashier_avg_time)
+                                                              )
+                                                             )
+
+        return avg_wait_times
+
+
 
 if __name__ == "__main__":
 
-    max_days = 3
+    max_days = 1
     seed = 53243
 
     s = Simulation(max_days = max_days, inside_capacity = 25, rng_seed = seed, idle_checkin_servers = 5)
     
     print(s.master_df_time_table)
-    # print(s.master_df_time_table.iloc[0:50,0:6])
     print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'END_DAY'])
     print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'I'])
 
-    
+
+    # Average wait times
+    avg_wait_times = s.get_avg_wait_times()
+    print(avg_wait_times["total"])
+
     # print(f"Has Phantom) {s.has_phantom()}")     # Was False
