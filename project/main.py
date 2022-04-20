@@ -36,9 +36,9 @@ from numpy.random import default_rng
 
 class Simulation():
     def __init__(self, max_days = 120, rng_seed = None,
-                 inside_capacity = 25,idle_checkin_servers = 3,idle_camera_servers = 2,
-                 idle_roadtest_servers = 9,idle_writtentest_servers = 8,idle_clerk_servers = 20,
-                 idle_cashier_servers = 3):
+                 inside_capacity = 25,idle_checkin_servers = 3,idle_camera_servers = 1,
+                 idle_roadtest_servers = 5,idle_writtentest_servers = 30,idle_clerk_servers = 14,
+                 idle_cashier_servers = 4):
 
         self.rng_generator = default_rng(rng_seed)
         self.master_df_time_table = pd.DataFrame() # Each daily data is appended
@@ -46,11 +46,11 @@ class Simulation():
         self.time_events_list = LinkedList()
         
         # How long each process takes
-        self.checkin_avg_time = 2 / 60
+        self.checkin_avg_time = 1.5 / 60
         self.roadtest_avg_time = 15 / 60
-        self.camera_avg_time = 1 / 60
-        self.clerk_avg_time = 15 / 60
-        self.writtentest_avg_time = 5 / 60
+        self.camera_avg_time = 1.5 / 60
+        self.clerk_avg_time = 12 / 60
+        self.writtentest_avg_time = 30 / 60
         self.cashier_avg_time = 1 / 60
 
         # Increased arrival rates. 7:30-5:00 workday assuming. In hours
@@ -198,10 +198,7 @@ class Simulation():
         
         time = curr_event["time"]
         
-        # Action
-        self.num_total_arrivals += 0 # Already accounted for in event_I for simplicity
-        # todo get rid of this?
-        
+        # Action        
         
         # Mode 1: let all people inside the building
         if self.num_to_initially_letinside >= 1:
@@ -789,10 +786,10 @@ class Simulation():
 
 if __name__ == "__main__":
 
-    max_days = 5
+    max_days = 2
     seed = 53243
 
-    s = Simulation(max_days = max_days, inside_capacity = 25, rng_seed = seed, idle_checkin_servers = 5)
+    s = Simulation(max_days = max_days, inside_capacity = 25, rng_seed = seed, idle_checkin_servers = 3)
     
     print(s.master_df_time_table)
     print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'END_DAY'])
@@ -801,4 +798,5 @@ if __name__ == "__main__":
     # Check arrivals and fail rate
     print(s.master_output_table["total_arrivals"]) # True average is 1352
     print(s.master_output_table["total_fails"]/s.master_output_table["total_arrivals"]) # True percent is 1/3
+    print(s.master_output_table.T)
     # print(f"Has Phantom) {s.has_phantom()}")     # Was False
