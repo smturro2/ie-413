@@ -3,6 +3,7 @@ import numpy.random as rand
 import pandas as pd
 from sorted_linked_list import LinkedList
 from numpy.random import default_rng
+import matplotlib.pyplot as plt
 
 # Done:
 # - Rounded initial arrivals
@@ -36,9 +37,9 @@ from numpy.random import default_rng
 
 class Simulation():
     def __init__(self, max_days = 120, rng_seed = None,
-                 inside_capacity = 25,idle_checkin_servers = 3,idle_camera_servers = 1,
-                 idle_roadtest_servers = 5,idle_writtentest_servers = 30,idle_clerk_servers = 14,
-                 idle_cashier_servers = 4):
+                 inside_capacity = 30,idle_checkin_servers = 4,idle_camera_servers = 1,
+                 idle_roadtest_servers = 4,idle_writtentest_servers = 30,idle_clerk_servers = 14,
+                 idle_cashier_servers = 3):
 
         self.rng_generator = default_rng(rng_seed)
         self.master_df_time_table = pd.DataFrame() # Each daily data is appended
@@ -49,7 +50,7 @@ class Simulation():
         self.checkin_avg_time = 1.5 / 60
         self.roadtest_avg_time = 15 / 60
         self.camera_avg_time = 1.5 / 60
-        self.clerk_avg_time = 12 / 60
+        self.clerk_avg_time = 10 / 60
         self.writtentest_avg_time = 30 / 60
         self.cashier_avg_time = 1 / 60
 
@@ -780,8 +781,32 @@ class Simulation():
         for c in self.df_distr.columns[:-1]:
             outputs["avg_"+c] = np.dot(self.df_distr[c],self.df_distr["weights"])
             outputs["max_"+c] = np.max(self.df_distr[c])
+        outputs["system_empty"] = self.df_time_table.iloc[-2,0] - self.df_time_table.iloc[0,0]    
+            
+        last_arrival_index = self.df_time_table.loc[self.df_time_table["event"] == 'A'].tail(1).index.to_list()[0]
+        
+        print(self.df_distr.columns)
+        
+        # Before doors close
+        plt.plot(self.df_distr.iloc[:last_arrival_index,0], label='CI_Inside')
+        plt.plot(self.df_distr.iloc[:last_arrival_index,3], label='Clerk')
+        plt.plot(self.df_distr.iloc[:last_arrival_index,4], label='Road')
+        plt.plot(self.df_distr.iloc[:last_arrival_index,5], label='Written')
+        plt.plot(self.df_distr.iloc[:last_arrival_index,6], label='Cashier')
+        
+        # After doors close
+        # plt.plot(self.df_distr.iloc[last_arrival_index:,2], label='CI_Inside')
+        # plt.plot(self.df_distr.iloc[last_arrival_index:,4], label='Clerk')
+        # plt.plot(self.df_distr.iloc[last_arrival_index:,5], label='Road')
+        # plt.plot(self.df_distr.iloc[last_arrival_index:,6], label='Written')
+        # plt.plot(self.df_distr.iloc[last_arrival_index:,7], label='Cashier')
+        plt.axvline(x = last_arrival_index, c='black')
+        plt.legend()
+        plt.xlabel("Event index")
+        plt.ylabel("Number of patrons in line")
+        
+        plt.show()
         return outputs
-
 
 
 if __name__ == "__main__":
@@ -789,14 +814,14 @@ if __name__ == "__main__":
     max_days = 2
     seed = 53243
 
-    s = Simulation(max_days = max_days, inside_capacity = 25, rng_seed = seed, idle_checkin_servers = 3)
+    s = Simulation(max_days = max_days, inside_capacity = 30, rng_seed = seed, idle_checkin_servers = 4)
     
     print(s.master_df_time_table)
     print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'END_DAY'])
     print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'I'])
 
     # Check arrivals and fail rate
-    print(s.master_output_table["total_arrivals"]) # True average is 1352
-    print(s.master_output_table["total_fails"]/s.master_output_table["total_arrivals"]) # True percent is 1/3
+    # print(s.master_output_table["total_arrivals"]) # True average is 1352
+    # print(s.master_output_table["total_fails"]/s.master_output_table["total_arrivals"]) # True percent is 1/3
     print(s.master_output_table.T)
     # print(f"Has Phantom) {s.has_phantom()}")     # Was False
