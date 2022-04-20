@@ -663,6 +663,8 @@ class Simulation():
         self.master_df_time_table = self.master_df_time_table.append(self.df_time_table, ignore_index=True)
         # Store avg weight times
         self.master_output_table = self.master_output_table.append(self.get_outputs(), ignore_index=True)
+        # Plot daily output
+        self.plot_daily_output()
 
 
         # Increment day_counter
@@ -782,31 +784,45 @@ class Simulation():
             outputs["avg_"+c] = np.dot(self.df_distr[c],self.df_distr["weights"])
             outputs["max_"+c] = np.max(self.df_distr[c])
         outputs["system_empty"] = self.df_time_table.iloc[-2,0] - self.df_time_table.iloc[0,0]    
-            
+                    
+        return outputs
+    
+    def plot_daily_output(self, when ='after'):
         last_arrival_index = self.df_time_table.loc[self.df_time_table["event"] == 'A'].tail(1).index.to_list()[0]
         
-        print(self.df_distr.columns)
+        #df_distr_time = self.df_time_table.join(self.df_distr)
+        df_distr_time = self.df_distr.copy()
+        df_distr_time['time'] = self.df_time_table['time'].copy()
+
+        if when == 'before':
+            df_distr_time = df_distr_time.iloc[:last_arrival_index]
+        else:
+            df_distr_time = df_distr_time.iloc[last_arrival_index:]
         
-        # Before doors close
-        plt.plot(self.df_distr.iloc[:last_arrival_index,0], label='CI_Inside')
-        plt.plot(self.df_distr.iloc[:last_arrival_index,3], label='Clerk')
-        plt.plot(self.df_distr.iloc[:last_arrival_index,4], label='Road')
-        plt.plot(self.df_distr.iloc[:last_arrival_index,5], label='Written')
-        plt.plot(self.df_distr.iloc[:last_arrival_index,6], label='Cashier')
+        print(df_distr_time.columns)
         
-        # After doors close
-        # plt.plot(self.df_distr.iloc[last_arrival_index:,2], label='CI_Inside')
-        # plt.plot(self.df_distr.iloc[last_arrival_index:,4], label='Clerk')
-        # plt.plot(self.df_distr.iloc[last_arrival_index:,5], label='Road')
-        # plt.plot(self.df_distr.iloc[last_arrival_index:,6], label='Written')
-        # plt.plot(self.df_distr.iloc[last_arrival_index:,7], label='Cashier')
-        plt.axvline(x = last_arrival_index, c='black')
+        if when == 'before':
+            # Before doors close
+            plt.plot(df_distr_time['time'], df_distr_time['num_line_checkin_inside'], label='CI_Inside')
+            plt.plot(df_distr_time['time'], df_distr_time['num_line_clerk'], label='Clerk')
+            plt.plot(df_distr_time['time'], df_distr_time['num_line_roadtest'], label='Road')
+            plt.plot(df_distr_time['time'], df_distr_time['num_line_writtentest'], label='Written')
+            plt.plot(df_distr_time['time'], df_distr_time['num_line_cashier'], label='Cashier')
+        
+        else:
+            # After doors close
+            plt.plot(df_distr_time['time'], df_distr_time['num_line_checkin_inside'], label='CI_Inside')
+            plt.plot(df_distr_time['time'], df_distr_time['num_line_clerk'], label='Clerk')
+            plt.plot(df_distr_time['time'], df_distr_time['num_line_roadtest'], label='Road')
+            plt.plot(df_distr_time['time'], df_distr_time['num_line_writtentest'], label='Written')
+            plt.plot(df_distr_time['time'], df_distr_time['num_line_cashier'], label='Cashier')
+            
+        plt.axvline(x = self.workday_length, c='black')
         plt.legend()
-        plt.xlabel("Event index")
+        plt.xlabel("Simulation hour")
         plt.ylabel("Number of patrons in line")
         
         plt.show()
-        return outputs
 
 
 if __name__ == "__main__":
