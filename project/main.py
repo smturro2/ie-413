@@ -74,13 +74,21 @@ class Simulation():
         self.idle_writtentest_servers = idle_writtentest_servers
         self.idle_clerk_servers = idle_clerk_servers
         self.idle_cashier_servers = idle_cashier_servers
-        self.plot_output = plot_output
 
+        self.total_checkin_servers = idle_checkin_servers
+        self.total_camera_servers = idle_camera_servers
+        self.total_roadtest_servers = idle_roadtest_servers
+        self.total_writtentest_servers = idle_writtentest_servers
+        self.total_clerk_servers = idle_clerk_servers
+        self.total_cashier_servers = idle_cashier_servers
+        
         # Others
         self.event_list_empty = False
         self.max_days = max_days
         self.day_counter = 0 
         self.m = 100 # day modulus to differentiate time of each day
+        self.plot_output = plot_output
+
         
         print(f'Running Simulation for {self.max_days} days...')
 
@@ -118,6 +126,12 @@ class Simulation():
             for i in ["arrive","depart"]:
                 self.queue_times[q+"_"+i] = list()
 
+        # Service times
+        self.service_times = {}
+        servers = ["ci","wt","rt","cam","clk","csh"]
+        for s in servers:
+            self.service_times[s] = list()
+        
         # Action
         self.num_total_arrivals = 0
         self.num_line_checkin_inside = 0
@@ -303,6 +317,8 @@ class Simulation():
         # Queue an End Check-in
         temp = {}
         t_ci = self.rng_generator.exponential(self.checkin_avg_time)
+        # Record service time
+        self.service_times["ci"].append(t_ci)
         temp["time"] = time + t_ci
         temp["event"] = "E_CI"
         self.time_events_list.addNode(temp["time"], temp)
@@ -389,6 +405,8 @@ class Simulation():
         # Queue an End Camera
         temp = {}
         t_cam = self.rng_generator.exponential(self.camera_avg_time)
+        # Record service time
+        self.service_times["cam"].append(t_cam)
         temp["time"] = time + t_cam
         temp["event"] = "E_CAM"
         self.time_events_list.addNode(temp["time"], temp)
@@ -441,6 +459,8 @@ class Simulation():
         # Queue an End Clerk
         temp = {}
         t_clk = self.rng_generator.exponential(self.clerk_avg_time)
+        # Record service time
+        self.service_times["clk"].append(t_clk)
         temp["time"] = time + t_clk
         temp["event"] = "E_CLK"
         self.time_events_list.addNode(temp["time"], temp)
@@ -496,6 +516,8 @@ class Simulation():
         # Queue an End Road Test
         temp = {}
         t_rt = self.rng_generator.exponential(self.roadtest_avg_time)
+        # Record service time
+        self.service_times["rt"].append(t_rt)
         temp["time"] = time + t_rt
         temp["event"] = "E_RT"
         self.time_events_list.addNode(temp["time"], temp)
@@ -562,6 +584,8 @@ class Simulation():
         # Queue an End Written Test
         temp = {}
         t_wt = self.rng_generator.exponential(self.writtentest_avg_time)
+        # Record service time
+        self.service_times["wt"].append(t_wt)
         temp["time"] = time + t_wt
         temp["event"] = "E_WT"
         self.time_events_list.addNode(temp["time"], temp)
@@ -619,6 +643,8 @@ class Simulation():
         # Queue an End Check-in
         temp = {}
         t_csh = self.rng_generator.exponential(self.cashier_avg_time)
+        # Record service time
+        self.service_times["csh"].append(t_csh)
         temp["time"] = time + t_csh
         temp["event"] = "E_CSH"
         self.time_events_list.addNode(temp["time"], temp)
@@ -742,6 +768,26 @@ class Simulation():
         outputs = {}
         for q in queues:
             outputs["wait_time_"+q] = np.array(self.queue_times[q + "_depart"]) - self.queue_times[q + "_arrive"]
+            outputs["wait_time_"+q+"_placeholder"] = outputs["wait_time_"+q].copy()
+            outputs["wait_time_"+q] = outputs["wait_time_"+q].mean()
+
+        alpha = -1
+        mean_service_times = {"outside": self.checkin_avg_time,
+                     "inside": self.checkin_avg_time,
+                     "wt": self.writtentest_avg_time,
+                     "rt": self.roadtest_avg_time,
+                     "cam": self.camera_avg_time,
+                     "clk": self.clerk_avg_time,
+                     "csh": self.cashier_avg_time}
+
+        for q in queues:
+            outputs["wait_time_"+q] = np.array(self.queue_times[q + "_depart"]) - self.queue_times[q + "_arrive"]
+            if q == 'outside' or q == 'inside':
+                outputs["wait_time_"+q] = np.array(outputs["wait_time_"+q]) + alpha * (
+                                                np.array(self.service_times["ci"]) - mean_service_times[q])
+            else:  
+                outputs["wait_time_"+q] = np.array(outputs["wait_time_"+q]) + alpha * (
+                                                np.array(self.service_times[q]) - mean_service_times[q])
             outputs["wait_time_"+q] = outputs["wait_time_"+q].mean()
 
         # total
@@ -800,25 +846,28 @@ class Simulation():
             df_distr_time = df_distr_time.iloc[last_arrival_index:]
         elif when == 'all':
             pass
-                
+        
+        df_distr_time['adj_time'] = df_distr_time['time'] - self.m * self.day_counter
+        
         if when == 'before':
             # Before doors close
-            plt.plot(df_distr_time['time'], df_distr_time['num_line_checkin_inside'], label='CI_Inside')
-            plt.plot(df_distr_time['time'], df_distr_time['num_line_clerk'], label='Clerk')
-            plt.plot(df_distr_time['time'], df_distr_time['num_line_roadtest'], label='Road')
-            plt.plot(df_distr_time['time'], df_distr_time['num_line_writtentest'], label='Written')
-            plt.plot(df_distr_time['time'], df_distr_time['num_line_cashier'], label='Cashier')
+            plt.plot(df_distr_time['adj_time'], df_distr_time['num_line_checkin_inside'], label='CI_Inside')
+            plt.plot(df_distr_time['adj_time'], df_distr_time['num_line_clerk'], label='Clerk')
+            plt.plot(df_distr_time['adj_time'], df_distr_time['num_line_roadtest'], label='Road')
+            plt.plot(df_distr_time['adj_time'], df_distr_time['num_line_writtentest'], label='Written')
+            plt.plot(df_distr_time['adj_time'], df_distr_time['num_line_cashier'], label='Cashier')
         
         else:
             # After doors close
-            plt.plot(df_distr_time['time'], df_distr_time['num_line_checkin_inside'], label='CI_Inside')
-            plt.plot(df_distr_time['time'], df_distr_time['num_line_clerk'], label='Clerk')
-            plt.plot(df_distr_time['time'], df_distr_time['num_line_roadtest'], label='Road')
-            plt.plot(df_distr_time['time'], df_distr_time['num_line_writtentest'], label='Written')
-            plt.plot(df_distr_time['time'], df_distr_time['num_line_cashier'], label='Cashier')
+            plt.plot(df_distr_time['adj_time'], df_distr_time['num_line_checkin_inside'], label='CI_Inside')
+            plt.plot(df_distr_time['adj_time'], df_distr_time['num_line_clerk'], label='Clerk')
+            plt.plot(df_distr_time['adj_time'], df_distr_time['num_line_roadtest'], label='Road')
+            plt.plot(df_distr_time['adj_time'], df_distr_time['num_line_writtentest'], label='Written')
+            plt.plot(df_distr_time['adj_time'], df_distr_time['num_line_cashier'], label='Cashier')
             
-        plt.axvline(x = self.workday_length, c='black')
+        # plt.axvline(x = self.workday_length, c='black')
         plt.legend()
+        plt.title("Queue lengths vs. Simulation hour")
         plt.xlabel("Simulation hour")
         plt.ylabel("Number of patrons in line")
         
@@ -830,15 +879,16 @@ def calc_conf_intervals(df_master_outputs,alpha = .05):
     df_conf = pd.DataFrame(columns = df_desc.columns)
     df_conf.loc["lower"] = df_desc.loc["mean"] - z * df_desc.loc["std"]
     df_conf.loc["upper"] = df_desc.loc["mean"] + z * df_desc.loc["std"]
+    print(df_desc.loc["std"])
     return df_conf
 
 
 if __name__ == "__main__":
 
-    max_days = 2
+    max_days = 5
     seed = 53243
 
-    s = Simulation(max_days = max_days, inside_capacity = 25, rng_seed = seed, idle_checkin_servers = 4, plot_output=True)
+    s = Simulation(max_days = max_days, inside_capacity = 25, rng_seed = seed, idle_checkin_servers = 4, plot_output=False)
     # master time table
     print(s.master_df_time_table)
     # print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'END_DAY'])
