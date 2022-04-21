@@ -26,18 +26,12 @@ import scipy.stats as stats
 # - Slide 117 of Chapter 1 has the event graph for multi-server; it was helpful to make sure stuff is being tracked correctly
 # - XP added some general comments to Project Proposal document about flow of customers
 
-# XP Explanation Notes 4/18 4/19
-# - Swapped order of P and B_CI in Mode 2 of P: the reason P does not change any numbers is because it calls a new B_CI
-# - Fixed # of people to let into system initially (= inside_capacity)
-# - Naive solution to end_day: LinkedList can't go back in time, so need to set time for future days >= t(END_DAY) = self.m
-# - Lines 132-141 readjust arrival cutoff windows to match day modulus, 630 in END_DAY
-# - From XP's experience, many more ppl went to clerk than WT or RT, possibly due to RealID mandate (check/consider rates?)
 
 class Simulation():
     def __init__(self, max_days = 120, rng_seed = None,
                  inside_capacity = 30,idle_checkin_servers = 4,idle_camera_servers = 1,
                  idle_roadtest_servers = 4,idle_writtentest_servers = 30,idle_clerk_servers = 14,
-                 idle_cashier_servers = 3):
+                 idle_cashier_servers = 3, plot_output = False):
 
         self.rng_generator = default_rng(rng_seed)
         self.master_df_time_table = pd.DataFrame() # Each daily data is appended
@@ -80,6 +74,7 @@ class Simulation():
         self.idle_writtentest_servers = idle_writtentest_servers
         self.idle_clerk_servers = idle_clerk_servers
         self.idle_cashier_servers = idle_cashier_servers
+        self.plot_output = plot_output
 
         # Others
         self.event_list_empty = False
@@ -146,8 +141,11 @@ class Simulation():
         self.num_to_initially_serve = 0 # Number of people to let in and serve when doors open
 
         # Initial arrivals before doors open
-        time_init = 0
-        while time_init > -1:
+        #time_init = 0
+        #while time_init > -1:
+        time_init = self.day_counter * self.m
+        cutoff = time_init - 1
+        while time_init > cutoff:
             time_init -= self.rng_generator.exponential(1 / self.initial_arrival_rate)
             self.num_line_checkin_outside += 1
             self.queue_times["outside_arrive"].append(time_init)
@@ -665,7 +663,8 @@ class Simulation():
         # Store avg weight times
         self.master_output_table = self.master_output_table.append(self.get_outputs(), ignore_index=True)
         # Plot daily output
-        self.plot_daily_output()
+        if self.plot_output:
+            self.plot_daily_output()
 
 
         # Increment day_counter
@@ -788,7 +787,7 @@ class Simulation():
                     
         return outputs
     
-    def plot_daily_output(self, when ='after'):
+    def plot_daily_output(self, when ='all'):
         last_arrival_index = self.df_time_table.loc[self.df_time_table["event"] == 'A'].tail(1).index.to_list()[0]
         
         #df_distr_time = self.df_time_table.join(self.df_distr)
@@ -797,11 +796,11 @@ class Simulation():
 
         if when == 'before':
             df_distr_time = df_distr_time.iloc[:last_arrival_index]
-        else:
+        elif when == 'after':
             df_distr_time = df_distr_time.iloc[last_arrival_index:]
-        
-        print(df_distr_time.columns)
-        
+        elif when == 'all':
+            pass
+                
         if when == 'before':
             # Before doors close
             plt.plot(df_distr_time['time'], df_distr_time['num_line_checkin_inside'], label='CI_Inside')
@@ -836,14 +835,14 @@ def calc_conf_intervals(df_master_outputs,alpha = .05):
 
 if __name__ == "__main__":
 
-    max_days = 5
+    max_days = 2
     seed = 53243
 
-    s = Simulation(max_days = max_days, inside_capacity = 25, rng_seed = seed, idle_checkin_servers = 3)
+    s = Simulation(max_days = max_days, inside_capacity = 25, rng_seed = seed, idle_checkin_servers = 4, plot_output=True)
     # master time table
     print(s.master_df_time_table)
-    print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'END_DAY'])
-    print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'I'])
+    # print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'END_DAY'])
+    # print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'I'])
     # Check arrivals and fail rate
     print(s.master_output_table["total_arrivals"]) # True average is 1352
     print(s.master_output_table["total_fails"]/s.master_output_table["total_arrivals"]) # True percent is 1/3
@@ -856,6 +855,6 @@ if __name__ == "__main__":
     master_df_time_table = pd.read_csv("time_table.csv")
     master_output_table = pd.read_csv("outputs.csv")
     conf_intervals = calc_conf_intervals(master_output_table)
-    print(conf_intervals)
+    print(conf_intervals.T)
 
     # print(f"Has Phantom) {s.has_phantom()}")     # Was False
