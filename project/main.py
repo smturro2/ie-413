@@ -766,11 +766,6 @@ class Simulation():
     def get_outputs(self):
         queues = ["outside", "inside", "wt", "rt", "cam", "clk", "csh"]
         outputs = {}
-        for q in queues:
-            outputs["wait_time_"+q] = np.array(self.queue_times[q + "_depart"]) - self.queue_times[q + "_arrive"]
-            outputs["wait_time_"+q+"_placeholder"] = outputs["wait_time_"+q].copy()
-            outputs["wait_time_"+q] = outputs["wait_time_"+q].mean()
-
         alpha = -1
         mean_service_times = {"outside": self.checkin_avg_time,
                      "inside": self.checkin_avg_time,
