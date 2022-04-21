@@ -4,6 +4,7 @@ import pandas as pd
 from sorted_linked_list import LinkedList
 from numpy.random import default_rng
 import matplotlib.pyplot as plt
+import scipy.stats as stats
 
 # Done:
 # - Rounded initial arrivals
@@ -14,14 +15,11 @@ import matplotlib.pyplot as plt
 # - END_DAY functional, runs multiple days using a 100*day_counter ticker
 # - Output metrics done
 # - Finalize estimates for service times and number of servers
+# - initial arrivals now arrive spaced out.
+# - conf intervals calculated
 
 
 # To do:
-# - Average wait time
-#    How should we handle the arrival times of the people in line when we open?
-#       Have about 50 people with arrival time of 0?
-# check Percent fails = 1/3
-# check avg arrivals per day is = 137
 
 # Overall Notes
 # - Time is in hours, max_days is days
@@ -59,6 +57,7 @@ class Simulation():
         self.lunch_rush_start = 3.5  # 11:00 start
         self.lunch_rush_end = 6.5  # 2:00 end
         self.workday_length = 9.5  # Close at 5:00
+        self.initial_arrival_rate = 50
         self.decreased_arrival_rate = 115
         self.increased_arrival_rate = 175
 
@@ -146,11 +145,13 @@ class Simulation():
         self.num_to_initially_letinside = 0 # Number of people to let in when doors open, including those who will be served
         self.num_to_initially_serve = 0 # Number of people to let in and serve when doors open
 
-        
-        self.num_line_checkin_outside = np.max([0, round(self.rng_generator.normal(50,10))]) # assert positive and integer
+        # Initial arrivals before doors open
+        time_init = 0
+        while time_init > -1:
+            time_init -= self.rng_generator.exponential(1 / self.initial_arrival_rate)
+            self.num_line_checkin_outside += 1
+            self.queue_times["outside_arrive"].append(time_init)
         self.num_total_arrivals += self.num_line_checkin_outside
-        # Add arrivals to list
-        self.queue_times["outside_arrive"].extend([time]*self.num_line_checkin_outside)
                 
         # Queue P, initial processing of letting people and assigning a server if open
         if self.num_line_checkin_outside <= self.idle_checkin_servers: # Fewer people outside than servers
@@ -824,20 +825,37 @@ class Simulation():
         
         plt.show()
 
+def calc_conf_intervals(df_master_outputs,alpha = .05):
+    z = stats.t.ppf(q=1-alpha/2,df=len(df_master_outputs)-1)
+    df_desc = df_master_outputs.describe()
+    df_conf = pd.DataFrame(columns = df_desc.columns)
+    df_conf.loc["lower"] = df_desc.loc["mean"] - z * df_desc.loc["std"]
+    df_conf.loc["upper"] = df_desc.loc["mean"] + z * df_desc.loc["std"]
+    return df_conf
+
 
 if __name__ == "__main__":
 
-    max_days = 2
+    max_days = 5
     seed = 53243
 
-    s = Simulation(max_days = max_days, inside_capacity = 30, rng_seed = seed, idle_checkin_servers = 4)
-    
+    s = Simulation(max_days = max_days, inside_capacity = 25, rng_seed = seed, idle_checkin_servers = 3)
+    # master time table
     print(s.master_df_time_table)
     print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'END_DAY'])
     print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'I'])
-
     # Check arrivals and fail rate
-    # print(s.master_output_table["total_arrivals"]) # True average is 1352
-    # print(s.master_output_table["total_fails"]/s.master_output_table["total_arrivals"]) # True percent is 1/3
+    print(s.master_output_table["total_arrivals"]) # True average is 1352
+    print(s.master_output_table["total_fails"]/s.master_output_table["total_arrivals"]) # True percent is 1/3
     print(s.master_output_table.T)
+    # Save
+    s.master_df_time_table.to_csv("time_table.csv",index=False)
+    s.master_output_table.to_csv("outputs.csv",index=False)
+
+    # load
+    master_df_time_table = pd.read_csv("time_table.csv")
+    master_output_table = pd.read_csv("outputs.csv")
+    conf_intervals = calc_conf_intervals(master_output_table)
+    print(conf_intervals)
+
     # print(f"Has Phantom) {s.has_phantom()}")     # Was False
