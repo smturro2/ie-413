@@ -45,7 +45,7 @@ class Simulation():
         self.workday_length = 9.5  # Close at 5:00
         self.initial_arrival_rate = 50
         self.decreased_arrival_rate = 115
-        self.increased_arrival_rate = 175
+        self.increased_arrival_rate = 162
 
         # Probability of moving from *** to ***
         a=0.0645375
@@ -869,7 +869,7 @@ def calc_conf_intervals(df_master_outputs,alpha = .05):
 
 if __name__ == "__main__":
 
-    max_days = 5
+    max_days = 365
     seed = 53243
 
     s = Simulation(max_days = max_days, inside_capacity = 25, rng_seed = seed, idle_checkin_servers = 4, plot_output=False)
