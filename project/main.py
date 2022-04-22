@@ -19,14 +19,6 @@ import scipy.stats as stats
 # - conf intervals calculated
 
 
-# To do:
-
-# Overall Notes
-# - Time is in hours, max_days is days
-# - Slide 117 of Chapter 1 has the event graph for multi-server; it was helpful to make sure stuff is being tracked correctly
-# - XP added some general comments to Project Proposal document about flow of customers
-
-
 class Simulation():
     def __init__(self, max_days = 120, rng_seed = None,
                  inside_capacity = 30,idle_checkin_servers = 4,idle_camera_servers = 1,
@@ -75,12 +67,6 @@ class Simulation():
         self.idle_clerk_servers = idle_clerk_servers
         self.idle_cashier_servers = idle_cashier_servers
 
-        self.total_checkin_servers = idle_checkin_servers
-        self.total_camera_servers = idle_camera_servers
-        self.total_roadtest_servers = idle_roadtest_servers
-        self.total_writtentest_servers = idle_writtentest_servers
-        self.total_clerk_servers = idle_clerk_servers
-        self.total_cashier_servers = idle_cashier_servers
         
         # Others
         self.event_list_empty = False
@@ -382,6 +368,7 @@ class Simulation():
                 temp["time"] = time
                 temp["event"] = "B_RT"
                 self.time_events_list.addNode(temp["time"], temp)
+
         else:
             # Failed
             self.num_fails += 1
@@ -541,6 +528,8 @@ class Simulation():
             temp["time"] = time
             temp["event"] = "B_RT"
             self.time_events_list.addNode(temp["time"], temp)
+
+
             
         # Transfer to photo or fail and pay
         rng = self.rng_generator.random()
@@ -774,8 +763,9 @@ class Simulation():
                      "cam": self.camera_avg_time,
                      "clk": self.clerk_avg_time,
                      "csh": self.cashier_avg_time}
-
+        
         for q in queues:
+
             outputs["wait_time_"+q] = np.array(self.queue_times[q + "_depart"]) - self.queue_times[q + "_arrive"]
             if q == 'outside' or q == 'inside':
                 outputs["wait_time_"+q] = np.array(outputs["wait_time_"+q]) + alpha * (
@@ -874,7 +864,6 @@ def calc_conf_intervals(df_master_outputs,alpha = .05):
     df_conf = pd.DataFrame(columns = df_desc.columns)
     df_conf.loc["lower"] = df_desc.loc["mean"] - z * df_desc.loc["std"]
     df_conf.loc["upper"] = df_desc.loc["mean"] + z * df_desc.loc["std"]
-    print(df_desc.loc["std"])
     return df_conf
 
 
@@ -889,8 +878,8 @@ if __name__ == "__main__":
     # print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'END_DAY'])
     # print(s.master_df_time_table.loc[s.master_df_time_table["event"] == 'I'])
     # Check arrivals and fail rate
-    print(s.master_output_table["total_arrivals"]) # True average is 1352
-    print(s.master_output_table["total_fails"]/s.master_output_table["total_arrivals"]) # True percent is 1/3
+    # print(s.master_output_table["total_arrivals"]) # True average is 1352
+    # print(s.master_output_table["total_fails"]/s.master_output_table["total_arrivals"]) # True percent is 1/3
     print(s.master_output_table.T)
     # Save
     s.master_df_time_table.to_csv("time_table.csv",index=False)
